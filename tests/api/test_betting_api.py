@@ -5,7 +5,7 @@ Validates the backend REST endpoints for balance, matches, and bet placement.
 import allure
 import pytest
 from framework.api.client import BettingApiClient
-from framework.api.models import BalanceResponse
+from framework.api.models import Balance, PlaceBetResponse
 
 
 @allure.epic("Backend API")
@@ -16,7 +16,7 @@ class TestBettingApi:
     @allure.severity(allure.severity_level.BLOCKER)
     def test_get_balance(self, api_client: BettingApiClient):
         """Verify GET /api/balance returns 200 with valid balance and currency."""
-        balance_obj: BalanceResponse = api_client.get_balance()
+        balance_obj: Balance = api_client.get_balance()
         assert balance_obj.currency == "EUR", f"Expected currency EUR, got {balance_obj.currency}"
         assert balance_obj.balance >= 0, f"Expected non-negative balance, got {balance_obj.balance}"
 

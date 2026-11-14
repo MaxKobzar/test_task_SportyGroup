@@ -6,7 +6,17 @@ from typing import List, Optional
 import allure
 import requests
 
-from framework.api.models import BalanceResponse, BetPlacementPayload, BetPlacementResponse, Match
+from framework.api.models import (
+    AuthError,
+    Balance,
+    BalanceResponse,
+    BetPlacementPayload,
+    BetPlacementResponse,
+    Error,
+    Match,
+    PlaceBetRequest,
+    PlaceBetResponse,
+)
 from framework.core.logger import get_logger
 
 logger = get_logger("ApiClient")
@@ -32,14 +42,14 @@ class BettingApiClient:
         except Exception:
             pass
 
-    def get_balance(self) -> BalanceResponse:
-        """Fetch current user balance."""
+    def get_balance(self) -> Balance:
+        """Fetch current user balance as defined in OpenAPI Balance schema."""
         url = f"{self.base_url}/api/balance"
         logger.info(f"GET {url} [user-id: {self.user_id}]")
         resp = self.session.get(url)
         self._attach_to_allure("GET /api/balance response", resp.text)
         resp.raise_for_status()
-        return BalanceResponse.model_validate(resp.json())
+        return Balance.model_validate(resp.json())
 
     def get_matches(self) -> List[Match]:
         """Fetch list of available matches."""
@@ -60,11 +70,11 @@ class BettingApiClient:
         self._attach_to_allure(f"POST /api/place-bet response ({resp.status_code})", resp.text)
         return resp
 
-    def place_bet(self, match_id: str, selection: str, stake: float) -> BetPlacementResponse:
-        """Place bet and parse standard response."""
+    def place_bet(self, match_id: str, selection: str, stake: float) -> PlaceBetResponse:
+        """Place bet and parse standard OpenAPI PlaceBetResponse."""
         resp = self.place_bet_raw(match_id=match_id, selection=selection, stake=stake)
         resp.raise_for_status()
-        return BetPlacementResponse.model_validate(resp.json())
+        return PlaceBetResponse.model_validate(resp.json())
 
     def reset_balance(self) -> requests.Response:
         """Reset user balance to default value (125.50)."""
