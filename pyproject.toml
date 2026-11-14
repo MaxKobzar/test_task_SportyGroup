@@ -20,3 +20,40 @@ python-dotenv = "^1.0.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes (unused imports, undefined variables)
+    "I",    # isort (import sorting)
+    "PT",   # flake8-pytest-style (pytest standards)
+    "T10",  # debugger calls (breakpoint, pdb)
+    "T20",  # print statements
+    "B",    # flake8-bugbear
+]
+ignore = [
+    "PT009", # Allow assertpy / custom assertions alongside standard asserts
+    "PT004", # Fixtures that don't return a value
+    "E501",  # Line length handled by formatter
+]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "framework.*"
+disallow_untyped_defs = false
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+check_untyped_defs = true

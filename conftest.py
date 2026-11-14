@@ -4,11 +4,13 @@ Provides CLI parameter registration (pytest_addoption),
 .env configuration integration, failure triage artifact collection
 (pytest_runtest_makereport), and core session fixtures.
 """
-from dataclasses import dataclass
+
 import os
+from dataclasses import dataclass
+
 import allure
-from dotenv import load_dotenv
 import pytest
+from dotenv import load_dotenv
 
 from framework.api.client import BettingApiClient
 from framework.core.logger import get_logger
@@ -75,6 +77,7 @@ def pytest_addoption(parser):
 @dataclass(frozen=True)
 class TestConfig:
     """Test runtime configuration derived from .env file and pytest_addoption CLI arguments."""
+
     base_url: str
     user_id: str
     browser: str
@@ -134,7 +137,9 @@ def pytest_runtest_makereport(item, call):
 
     is_failed = report.failed or (hasattr(report, "wasxfail") and report.skipped)
     if report.when == "call" and (report.failed or is_failed):
-        logger.error(f"Test '{item.name}' failed or xfailed. Initiating triage artifact collection...")
+        logger.error(
+            f"Test '{item.name}' failed or xfailed. Initiating triage artifact collection..."
+        )
 
         # Locate WebDriver from funcargs (direct driver fixture or Screenplay Actor)
         driver = item.funcargs.get("driver", None)
@@ -143,6 +148,7 @@ def pytest_runtest_makereport(item, call):
             if actor:
                 try:
                     from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
+
                     driver = actor.ability_to(BrowseTheWeb).driver
                 except Exception:
                     pass
@@ -174,7 +180,9 @@ def pytest_runtest_makereport(item, call):
 
         # 3. Log of execution of current test
         try:
-            exec_log = report.longreprtext if report.longreprtext else "No failure traceback recorded."
+            exec_log = (
+                report.longreprtext if report.longreprtext else "No failure traceback recorded."
+            )
             allure.attach(
                 exec_log,
                 name=f"execution_log_{item.name}",

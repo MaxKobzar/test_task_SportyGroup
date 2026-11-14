@@ -2,16 +2,16 @@
 API Test Suite using Python requests.
 Validates the backend REST endpoints for balance, matches, and bet placement.
 """
+
 import allure
-import pytest
+
 from framework.api.client import BettingApiClient
-from framework.api.models import Balance, PlaceBetResponse
+from framework.api.models import Balance
 
 
 @allure.epic("Backend API")
 @allure.feature("Betting REST API")
 class TestBettingApi:
-
     @allure.story("API-01: Retrieve User Balance")
     @allure.severity(allure.severity_level.BLOCKER)
     def test_get_balance(self, api_client: BettingApiClient):
@@ -45,24 +45,28 @@ class TestBettingApi:
         stake = 10.00
 
         resp = api_client.place_bet(match_id=target_match.id, selection="HOME", stake=stake)
-        assert resp.message == "Bet placed successfully" or resp.new_balance is not None, (
-            f"Bet placement failed or missing confirmation: {resp}"
-        )
+        assert (
+            resp.message == "Bet placed successfully" or resp.balance is not None
+        ), f"Bet placement failed or missing confirmation: {resp}"
 
         current_balance = api_client.get_balance().balance
         expected_balance = round(initial_balance - stake, 2)
-        assert current_balance == expected_balance, (
-            f"Balance not deducted correctly: expected {expected_balance}, got {current_balance}"
-        )
+        assert (
+            current_balance == expected_balance
+        ), f"Balance not deducted correctly: expected {expected_balance}, got {current_balance}"
 
     @allure.story("API-04: Bet Placement with Nonexistent Match ID")
     @allure.severity(allure.severity_level.NORMAL)
     def test_place_bet_invalid_match_id(self, api_client: BettingApiClient):
         """Verify placing a bet on an invalid match ID returns an error status code."""
-        resp = api_client.place_bet_raw(match_id="non-existent-match-9999", selection="HOME", stake=10.00)
-        assert resp.status_code in [400, 404, 422], (
-            f"Expected 4xx error for invalid match ID, but received {resp.status_code}"
+        resp = api_client.place_bet_raw(
+            match_id="non-existent-match-9999", selection="HOME", stake=10.00
         )
+        assert resp.status_code in [
+            400,
+            404,
+            422,
+        ], f"Expected 4xx error for invalid match ID, but received {resp.status_code}"
 
     @allure.story("API-05: Reset User Balance")
     @allure.severity(allure.severity_level.CRITICAL)
@@ -77,4 +81,6 @@ class TestBettingApi:
         assert reset_resp.status_code == 200, f"Reset endpoint failed: {reset_resp.status_code}"
 
         balance_obj = api_client.get_balance()
-        assert balance_obj.balance >= 100.0, f"Expected reset balance >= 100, got {balance_obj.balance}"
+        assert (
+            balance_obj.balance >= 100.0
+        ), f"Expected reset balance >= 100, got {balance_obj.balance}"

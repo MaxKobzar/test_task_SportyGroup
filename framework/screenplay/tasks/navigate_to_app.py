@@ -2,7 +2,9 @@
 Screenplay Task: NavigateToApp.
 Navigates the Actor to a target Page Object Model (POM) page.
 """
+
 from typing import Optional, Type, Union
+
 from framework.pages.base_page import BasePage
 from framework.pages.betting_page import BettingPage
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
@@ -30,7 +32,9 @@ class NavigateToApp:
         Accepts a Page Object Model class (e.g. BettingPage) or direct URL string.
         """
         # Backwards compatibility: if a URL string is passed as first argument
-        if isinstance(page_target, str) and (page_target.startswith("http://") or page_target.startswith("https://")):
+        if isinstance(page_target, str) and (
+            page_target.startswith("http://") or page_target.startswith("https://")
+        ):
             return cls(page_target=BettingPage, url=page_target)
         return cls(page_target=page_target, url=url)
 
@@ -52,6 +56,7 @@ class NavigateToApp:
                 target_url = self.page_target.get_url()
             else:
                 import os
+
                 base = os.getenv("BASE_URL", "https://qae-assignment-tau.vercel.app")
                 uid = os.getenv("USER_ID", "candidate-Mc2IYbjdqhj8")
                 sep = "&" if "?" in base else "?"

@@ -2,6 +2,7 @@
 Screenplay Task: PlaceBet.
 Handles entering stake and clicking place bet.
 """
+
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 
 

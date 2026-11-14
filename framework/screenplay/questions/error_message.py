@@ -1,7 +1,9 @@
 """
 Screenplay Question: PlaceBetButtonStatus & InlineErrorMessage.
 """
+
 from typing import Optional
+
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 
 

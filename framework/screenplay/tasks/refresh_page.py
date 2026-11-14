@@ -1,6 +1,7 @@
 """
 Screenplay Task: RefreshPage.
 """
+
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 
 

@@ -1,0 +1,43 @@
+repos:
+  # 1. Standard Git & File Hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+
+  # 2. Ultra-fast Linting and Formatting (Ruff)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # 3. Type Checking (Mypy)
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        files: ^(framework|tests)/
+        additional_dependencies:
+          - types-requests
+          - pydantic>=2.0.0
+        args:
+          - --ignore-missing-imports
+          - --check-untyped-defs
+
+  # 4. Pytest Collection Sanity Check
+  - repo: local
+    hooks:
+      - id: pytest-collect
+        name: pytest collection sanity check
+        entry: bash -c "if [ -f venv/bin/pytest ]; then venv/bin/pytest --collect-only -q; else pytest --collect-only -q; fi"
+        language: system
+        pass_filenames: false
+        always_run: true

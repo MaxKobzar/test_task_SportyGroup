@@ -3,23 +3,19 @@ UI Test Fixtures.
 Provides function-level WebDriver instances configurable via parsed pytest_addoption,
 Page Objects via Factory, Screenplay Actors, and API-driven test isolation preconditions.
 """
-from assertpy import assert_that
+
 import pytest
+from assertpy import assert_that
 from selenium import webdriver
 
 from framework.api.client import BettingApiClient
 from framework.core.logger import get_logger
 from framework.core.webdriver_factory import WebDriverFactory
-from framework.pages.betting_page import BettingPage
-from framework.pages.page_factory import PageFactory, PageType
-from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
-from framework.screenplay.abilities.call_api import CallAPI
-from framework.screenplay.actor import Actor
 
 logger = get_logger("UIConftest")
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture()
 def driver(request: pytest.FixtureRequest) -> webdriver.Remote:
     """
     Function-level WebDriver fixture.
@@ -53,10 +49,12 @@ def driver(request: pytest.FixtureRequest) -> webdriver.Remote:
     driver_instance.quit()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture()
 def reset_balance_precondition(api_client: BettingApiClient):
     """Precondition: Ensure candidate user starts each test with a clean baseline balance."""
     logger.info("Precondition: Resetting user balance via API...")
     resp = api_client.reset_balance()
-    assert_that(resp.status_code).described_as(f"API reset balance failure: {resp.text}").is_equal_to(200)
-    yield
+    assert_that(resp.status_code).described_as(
+        f"API reset balance failure: {resp.text}"
+    ).is_equal_to(200)
+    return

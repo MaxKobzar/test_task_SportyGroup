@@ -1,20 +1,16 @@
 """
 HTTP Client for the Betting Application REST API.
 """
+
 import json
-from typing import List, Optional
+from typing import List
+
 import allure
 import requests
 
 from framework.api.models import (
-    AuthError,
     Balance,
-    BalanceResponse,
-    BetPlacementPayload,
-    BetPlacementResponse,
-    Error,
     Match,
-    PlaceBetRequest,
     PlaceBetResponse,
 )
 from framework.core.logger import get_logger
@@ -29,16 +25,24 @@ class BettingApiClient:
         self.base_url = base_url.rstrip("/")
         self.user_id = user_id
         self.session = requests.Session()
-        self.session.headers.update({
-            "x-user-id": self.user_id,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "Sporty-QA-Automation-Framework"
-        })
+        self.session.headers.update(
+            {
+                "x-user-id": self.user_id,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": "Sporty-QA-Automation-Framework",
+            }
+        )
 
     def _attach_to_allure(self, name: str, data: str, mime: str = "application/json"):
         try:
-            allure.attach(data, name=name, attachment_type=allure.attachment_type.JSON if mime == "application/json" else allure.attachment_type.TEXT)
+            allure.attach(
+                data,
+                name=name,
+                attachment_type=allure.attachment_type.JSON
+                if mime == "application/json"
+                else allure.attachment_type.TEXT,
+            )
         except Exception:
             pass
 

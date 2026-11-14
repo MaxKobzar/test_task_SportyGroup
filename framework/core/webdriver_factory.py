@@ -2,7 +2,9 @@
 WebDriver Factory module.
 Creates and configures Selenium WebDriver instances according to runtime configuration.
 """
+
 from typing import Any, Optional
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -56,4 +58,6 @@ class WebDriverFactory:
             driver.implicitly_wait(0)  # Favor explicit waits throughout the framework
             return driver
 
-        raise ValueError(f"Unsupported browser: {browser_name}. Only 'chrome' is currently configured.")
+        raise ValueError(
+            f"Unsupported browser: {browser_name}. Only 'chrome' is currently configured."
+        )

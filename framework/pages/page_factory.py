@@ -2,8 +2,10 @@
 Page Factory module.
 Implements the Factory Method pattern to instantiate and configure Page Objects.
 """
+
 from enum import Enum
 from typing import Type, Union
+
 from selenium import webdriver
 
 from framework.pages.base_page import BasePage
@@ -12,6 +14,7 @@ from framework.pages.betting_page import BettingPage
 
 class PageType(str, Enum):
     """Enumeration of supported application page types."""
+
     BETTING = "betting"
 
 

@@ -2,12 +2,13 @@
 Betting Page Object for the Sporty Betting web application.
 Encapsulates DOM locators, element interactions, and validation queries.
 """
+
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional
+
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
@@ -62,8 +63,9 @@ class BettingPage(BasePage):
     def get_url(cls, base_url: Optional[str] = None, user_id: Optional[str] = None) -> str:
         """Construct the full application URL for the betting page from config or environment."""
         import os
-        base = base_url or os.getenv("BASE_URL", "https://qae-assignment-tau.vercel.app")
-        uid = user_id or os.getenv("USER_ID", "candidate-Mc2IYbjdqhj8")
+
+        base = base_url or os.getenv("BASE_URL") or "https://qae-assignment-tau.vercel.app"
+        uid = user_id or os.getenv("USER_ID") or "candidate-Mc2IYbjdqhj8"
         sep = "&" if "?" in base else "?"
         return f"{base}{sep}user-id={uid}"
 
@@ -95,7 +97,13 @@ class BettingPage(BasePage):
             raise IndexError(f"Match index {match_index} out of range (found {len(cards)} cards)")
 
         target_card = cards[match_index]
-        outcome_label = "1" if outcome.upper() in ["HOME", "1"] else "X" if outcome.upper() in ["DRAW", "X"] else "2"
+        outcome_label = (
+            "1"
+            if outcome.upper() in ["HOME", "1"]
+            else "X"
+            if outcome.upper() in ["DRAW", "X"]
+            else "2"
+        )
 
         buttons = target_card.find_elements(By.CSS_SELECTOR, "button.oddsButton")
         matching_btn = None
@@ -105,7 +113,9 @@ class BettingPage(BasePage):
                 break
 
         if not matching_btn:
-            raise NoSuchElementException(f"Could not find odds button for outcome '{outcome}' on match index {match_index}")
+            raise NoSuchElementException(
+                f"Could not find odds button for outcome '{outcome}' on match index {match_index}"
+            )
 
         # Scroll into view and click
         self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", matching_btn)
@@ -137,7 +147,13 @@ class BettingPage(BasePage):
         team_names = [t.text for t in selected_card.find_elements(By.CSS_SELECTOR, ".teamName")]
         teams_label = " vs ".join(team_names) if len(team_names) >= 2 else "Selected Match"
 
-        outcome_label = "1" if outcome.upper() in ["HOME", "1"] else "X" if outcome.upper() in ["DRAW", "X"] else "2"
+        outcome_label = (
+            "1"
+            if outcome.upper() in ["HOME", "1"]
+            else "X"
+            if outcome.upper() in ["DRAW", "X"]
+            else "2"
+        )
         buttons = selected_card.find_elements(By.CSS_SELECTOR, "button.oddsButton")
         matching_btn = None
         for btn in buttons:
@@ -203,7 +219,9 @@ class BettingPage(BasePage):
         # Wait for "PLACING..." transition to complete
         try:
             WebDriverWait(self.driver, 10).until(
-                EC.invisibility_of_element_located((By.CSS_SELECTOR, ".placeBetButtonPlacing, .spinner"))
+                EC.invisibility_of_element_located(
+                    (By.CSS_SELECTOR, ".placeBetButtonPlacing, .spinner")
+                )
             )
         except Exception:
             pass

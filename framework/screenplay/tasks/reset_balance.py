@@ -2,6 +2,7 @@
 Screenplay Task: ResetBalance.
 Resets user balance via backend API.
 """
+
 from framework.screenplay.abilities.call_api import CallAPI
 
 

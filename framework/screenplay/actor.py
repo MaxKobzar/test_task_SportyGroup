@@ -2,7 +2,9 @@
 Screenplay Pattern: Actor implementation.
 The Actor represents a user performing business tasks and asking questions about the system state.
 """
-from typing import Any, Dict, List, Type, TypeVar
+
+from typing import Any, Dict, Type, TypeVar
+
 import allure
 
 from framework.core.logger import get_logger

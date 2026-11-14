@@ -13,10 +13,12 @@ Implements 'The Ideal Synergy':
   where BrowseTheWeb delegates directly to PageFactory.get_page(PageType.BETTING, driver).
 - Backend state isolation (reset_balance_precondition) handled cleanly in background fixtures.
 """
+
 import re
+
 import allure
-from assertpy import assert_that, soft_assertions
 import pytest
+from assertpy import assert_that, soft_assertions
 
 from framework.core.logger import get_logger
 from framework.pages.betting_page import BettingPage
@@ -40,7 +42,6 @@ logger = get_logger("TestCriticalUserJourneyE2E")
 @allure.feature("Critical User Journey (Screenplay Architecture)")
 @pytest.mark.usefixtures("reset_balance_precondition")
 class TestSingleCriticalUserJourneyE2E:
-
     @allure.story("TC-BET-001: End-to-End Single Bet Placement & UI Balance Reconciliation")
     @allure.severity(allure.severity_level.BLOCKER)
     @allure.description("""
@@ -129,9 +130,9 @@ class TestSingleCriticalUserJourneyE2E:
             # Composite verification across all receipt modal fields via soft assertions
             with soft_assertions():
                 # 1. Title verification
-                assert_that(receipt["title"]).described_as(
-                    "Receipt modal title"
-                ).contains("Bet Placed Successfully")
+                assert_that(receipt["title"]).described_as("Receipt modal title").contains(
+                    "Bet Placed Successfully"
+                )
 
                 # 2. Bet Reference ID format: #B-XXXXX
                 assert_that(receipt["bet_id"]).described_as(
@@ -139,14 +140,14 @@ class TestSingleCriticalUserJourneyE2E:
                 ).matches(r"^#B-\d+$")
 
                 # 3. Stake verification
-                assert_that(receipt["stake"]).described_as(
-                    "Receipt wagered stake amount"
-                ).contains(expected_stake_str)
+                assert_that(receipt["stake"]).described_as("Receipt wagered stake amount").contains(
+                    expected_stake_str
+                )
 
                 # 4. Odds verification
-                assert_that(receipt["odds"]).described_as(
-                    "Receipt decimal odds"
-                ).contains(selected_meta["odds"])
+                assert_that(receipt["odds"]).described_as("Receipt decimal odds").contains(
+                    selected_meta["odds"]
+                )
 
                 # 5. Timestamp label present
                 assert_that(receipt["placed_at"]).described_as(

@@ -1,6 +1,7 @@
 """
 Structured logging module for test execution.
 """
+
 import logging
 import sys
 
@@ -14,8 +15,7 @@ def get_logger(name: str = "TestAutomation") -> logging.Logger:
     if not _LOGGER_INITIALIZED:
         logger.setLevel(logging.INFO)
         formatter = logging.Formatter(
-            fmt="%(asctime)s [%(levelname)s] [%(name)s]: %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
+            fmt="%(asctime)s [%(levelname)s] [%(name)s]: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
         stream_handler = logging.StreamHandler(sys.stdout)
         stream_handler.setFormatter(formatter)

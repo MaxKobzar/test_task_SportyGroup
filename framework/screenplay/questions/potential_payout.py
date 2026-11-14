@@ -1,6 +1,7 @@
 """
 Screenplay Question: PotentialPayout.
 """
+
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 
 

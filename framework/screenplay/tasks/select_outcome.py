@@ -1,7 +1,9 @@
 """
 Screenplay Tasks: SelectOutcome & SelectUpcomingMatchOutcome.
 """
+
 from typing import Dict
+
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 
 

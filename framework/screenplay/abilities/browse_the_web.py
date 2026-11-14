@@ -8,7 +8,9 @@ This ensures strict decoupling:
 - Page Objects encapsulate locators, explicit waits, and DOM mechanics (POM).
 - PageFactory provides the centralized Factory Method instantiation.
 """
+
 from typing import Dict, Type, TypeVar, Union, cast
+
 from selenium import webdriver
 
 from framework.pages.base_page import BasePage

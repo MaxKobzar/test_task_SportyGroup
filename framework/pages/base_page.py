@@ -2,7 +2,9 @@
 Base Page Object Model class.
 Provides reusable methods, explicit waits, and resilient element interactions.
 """
-from typing import List, Tuple
+
+from typing import List, Optional, Tuple
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
@@ -32,17 +34,21 @@ class BasePage:
         logger.info("Refreshing page...")
         self.driver.refresh()
 
-    def find_element(self, locator: Tuple[By, str], timeout: int = None) -> WebElement:
+    def find_element(self, locator: Tuple[By, str], timeout: Optional[int] = None) -> WebElement:
         """Wait for element to be present and visible in DOM."""
         wait = self.wait if timeout is None else WebDriverWait(self.driver, timeout)
         return wait.until(EC.visibility_of_element_located(locator))
 
-    def find_present_element(self, locator: Tuple[By, str], timeout: int = None) -> WebElement:
+    def find_present_element(
+        self, locator: Tuple[By, str], timeout: Optional[int] = None
+    ) -> WebElement:
         """Wait for element to exist in DOM, even if not yet visible."""
         wait = self.wait if timeout is None else WebDriverWait(self.driver, timeout)
         return wait.until(EC.presence_of_element_located(locator))
 
-    def find_elements(self, locator: Tuple[By, str], timeout: int = None) -> List[WebElement]:
+    def find_elements(
+        self, locator: Tuple[By, str], timeout: Optional[int] = None
+    ) -> List[WebElement]:
         """Wait for at least one element matching locator to be present."""
         wait = self.wait if timeout is None else WebDriverWait(self.driver, timeout)
         try:
@@ -51,14 +57,20 @@ class BasePage:
         except Exception:
             return []
 
-    def click(self, locator: Tuple[By, str], timeout: int = None) -> None:
+    def click(self, locator: Tuple[By, str], timeout: Optional[int] = None) -> None:
         """Wait for element to be clickable and click it."""
         wait = self.wait if timeout is None else WebDriverWait(self.driver, timeout)
         element = wait.until(EC.element_to_be_clickable(locator))
         logger.info(f"Clicking element: {locator}")
         element.click()
 
-    def type_text(self, locator: Tuple[By, str], text: str, clear: bool = True, timeout: int = None) -> None:
+    def type_text(
+        self,
+        locator: Tuple[By, str],
+        text: str,
+        clear: bool = True,
+        timeout: Optional[int] = None,
+    ) -> None:
         """Type text into element, optionally clearing it first."""
         element = self.find_element(locator, timeout=timeout)
         if clear:
@@ -66,7 +78,7 @@ class BasePage:
         logger.info(f"Typing '{text}' into element: {locator}")
         element.send_keys(text)
 
-    def get_text(self, locator: Tuple[By, str], timeout: int = None) -> str:
+    def get_text(self, locator: Tuple[By, str], timeout: Optional[int] = None) -> str:
         """Get visible inner text of element."""
         element = self.find_element(locator, timeout=timeout)
         return element.text.strip()
@@ -82,6 +94,8 @@ class BasePage:
     def wait_for_invisibility(self, locator: Tuple[By, str], timeout: int = 5) -> bool:
         """Wait until element becomes invisible or absent."""
         try:
-            return WebDriverWait(self.driver, timeout).until(EC.invisibility_of_element_located(locator))
+            return WebDriverWait(self.driver, timeout).until(
+                EC.invisibility_of_element_located(locator)
+            )
         except Exception:
             return False

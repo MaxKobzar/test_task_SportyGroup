@@ -1,6 +1,7 @@
 """
 Screenplay Question: DisplayedBalance.
 """
+
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 
 

@@ -2,6 +2,7 @@
 Screenplay Ability: CallAPI.
 Enables an Actor to execute REST API requests through BettingApiClient.
 """
+
 from framework.api.client import BettingApiClient
 
 
