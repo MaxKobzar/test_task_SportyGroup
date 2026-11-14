@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "sporty-qa-framework"
+version = "0.1.0"
+description = "Hybrid UI (Selenium + Screenplay & POM) and API Test Automation Framework"
+authors = ["QA Automation Engineer <qa@example.com>"]
+readme = "README.md"
+packages = [{include = "framework"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12"
+selenium = "^4.20.0"
+webdriver-manager = "^4.0.0"
+requests = "^2.31.0"
+pydantic = "^2.0.0"
+pytest = "^8.0.0"
+allure-pytest = "^2.13.0"
+assertpy = "^2.0"
+python-dotenv = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
