@@ -11,9 +11,7 @@ import allure
 import requests
 
 from framework.api.models import (
-    AuthError,
     Balance,
-    Error,
     Match,
     PlaceBetResponse,
     ResetBalanceResponse,
@@ -160,58 +158,31 @@ class BettingApiClient(BaseClient):
         """Fetch current user balance as defined in OpenAPI Balance schema."""
         logger.info(f"Fetching balance for user-id: {self.user_id}")
         resp = self.get("/api/balance")
-        resp.raise_for_status()
         return Balance.model_validate(resp.json())
 
     def get_matches(self) -> List[Match]:
         """Fetch list of available matches and strictly validate schema."""
         resp = self.get("/api/matches")
-        resp.raise_for_status()
         return [Match.model_validate(m) for m in resp.json()]
 
-    def place_bet_raw(
+    def post_place_bet(
         self,
         match_id: Optional[str] = None,
         selection: Optional[str] = None,
         stake: Optional[float] = None,
-        custom_payload: Optional[Any] = None,
         headers: Optional[dict] = None,
-    ) -> requests.Response:
-        """Send raw bet placement request to inspect status codes, error schemas, and validation."""
-        payload = (
-            custom_payload
-            if custom_payload is not None
-            else {"matchId": match_id, "selection": selection, "stake": stake}
-        )
+    ) -> PlaceBetResponse:
+        """Place bet, verify HTTP success (raise_for_status), and return validated PlaceBetResponse."""
 
-        if isinstance(payload, str):
-            return self.post("/api/place-bet", data=payload, headers=headers)
-        return self.post("/api/place-bet", json=payload, headers=headers)
-
-    def place_bet(self, match_id: str, selection: str, stake: float) -> PlaceBetResponse:
-        """Place bet and strictly parse/validate OpenAPI PlaceBetResponse."""
-        resp = self.place_bet_raw(match_id=match_id, selection=selection, stake=stake)
-        resp.raise_for_status()
+        body = {"matchId": match_id, "selection": selection, "stake": stake}
+        resp = self.post("/api/place-bet", json=body, headers=headers)
+        if resp.status_code == 200:
+            PlaceBetResponse.model_validate(resp.json())
         return PlaceBetResponse.model_validate(resp.json())
 
-    def reset_balance(self) -> requests.Response:
-        """Reset user balance to default value (125.50) and validate schema."""
-        logger.info(f"Resetting balance for user-id: {self.user_id}")
+    def post_reset_balance(self) -> ResetBalanceResponse:
+        """Reset balance and return validated ResetBalanceResponse."""
         resp = self.post("/api/reset-balance")
         if resp.status_code == 200:
             ResetBalanceResponse.model_validate(resp.json())
-        return resp
-
-    def reset_balance_model(self) -> ResetBalanceResponse:
-        """Reset balance and return validated ResetBalanceResponse."""
-        resp = self.reset_balance()
-        resp.raise_for_status()
         return ResetBalanceResponse.model_validate(resp.json())
-
-    def parse_error(self, response: requests.Response) -> Error:
-        """Parse and strictly schema-validate an Error response."""
-        return Error.model_validate(response.json())
-
-    def parse_auth_error(self, response: requests.Response) -> AuthError:
-        """Parse and strictly schema-validate an AuthError response."""
-        return AuthError.model_validate(response.json())
