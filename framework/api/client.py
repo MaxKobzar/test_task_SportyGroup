@@ -5,11 +5,12 @@ and domain-specific BettingApiClient for betting operations.
 """
 
 import json
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import allure
 import requests
 
+from framework.api.exceptions import raise_api_error
 from framework.api.models import (
     Balance,
     Match,
@@ -106,7 +107,9 @@ class BaseClient:
         """Execute GET request with automated telemetry and optional header overrides."""
         url = self._build_url(endpoint)
         logger.info(f"GET {url}")
-        return self.session.get(url, params=params, headers=headers, **kwargs)
+        resp = self.session.get(url, params=params, headers=headers, **kwargs)
+        raise_api_error(resp)
+        return resp
 
     def post(
         self,
@@ -119,7 +122,9 @@ class BaseClient:
         """Execute POST request with automated telemetry and optional header overrides."""
         url = self._build_url(endpoint)
         logger.info(f"POST {url}")
-        return self.session.post(url, data=data, json=json, headers=headers, **kwargs)
+        resp = self.session.post(url, data=data, json=json, headers=headers, **kwargs)
+        raise_api_error(resp)
+        return resp
 
     def put(
         self,
@@ -132,7 +137,9 @@ class BaseClient:
         """Execute PUT request with automated telemetry and optional header overrides."""
         url = self._build_url(endpoint)
         logger.info(f"PUT {url}")
-        return self.session.put(url, data=data, json=json, headers=headers, **kwargs)
+        resp = self.session.put(url, data=data, json=json, headers=headers, **kwargs)
+        raise_api_error(resp)
+        return resp
 
     def delete(
         self,
@@ -143,7 +150,9 @@ class BaseClient:
         """Execute DELETE request with automated telemetry and optional header overrides."""
         url = self._build_url(endpoint)
         logger.info(f"DELETE {url}")
-        return self.session.delete(url, headers=headers, **kwargs)
+        resp = self.session.delete(url, headers=headers, **kwargs)
+        raise_api_error(resp)
+        return resp
 
 
 class BettingApiClient(BaseClient):
@@ -154,15 +163,15 @@ class BettingApiClient(BaseClient):
         self.user_id = user_id
         self.session.headers.update({"x-user-id": self.user_id})
 
-    def get_balance(self) -> Balance:
+    def get_balance(self, headers: Optional[Dict[str, Any]] = None) -> Balance:
         """Fetch current user balance as defined in OpenAPI Balance schema."""
         logger.info(f"Fetching balance for user-id: {self.user_id}")
-        resp = self.get("/api/balance")
+        resp = self.get("/api/balance", headers=headers)
         return Balance.model_validate(resp.json())
 
-    def get_matches(self) -> List[Match]:
+    def get_matches(self, headers: Optional[Dict[str, Any]] = None) -> List[Match]:
         """Fetch list of available matches and strictly validate schema."""
-        resp = self.get("/api/matches")
+        resp = self.get("/api/matches", headers=headers)
         return [Match.model_validate(m) for m in resp.json()]
 
     def post_place_bet(
@@ -170,19 +179,23 @@ class BettingApiClient(BaseClient):
         match_id: Optional[str] = None,
         selection: Optional[str] = None,
         stake: Optional[float] = None,
-        headers: Optional[dict] = None,
+        headers: Optional[Dict[str, Any]] = None,
     ) -> PlaceBetResponse:
-        """Place bet, verify HTTP success (raise_for_status), and return validated PlaceBetResponse."""
-
-        body = {"matchId": match_id, "selection": selection, "stake": stake}
+        """Place bet, verify HTTP success, and return validated PlaceBetResponse."""
+        body: Dict[str, Any] = {
+            "matchId": match_id,
+            "selection": selection,
+            "stake": stake,
+        }
         resp = self.post("/api/place-bet", json=body, headers=headers)
-        if resp.status_code == 200:
-            PlaceBetResponse.model_validate(resp.json())
         return PlaceBetResponse.model_validate(resp.json())
 
-    def post_reset_balance(self) -> ResetBalanceResponse:
+    place_bet = post_place_bet
+
+    def post_reset_balance(self, headers: Optional[Dict[str, Any]] = None) -> ResetBalanceResponse:
         """Reset balance and return validated ResetBalanceResponse."""
-        resp = self.post("/api/reset-balance")
-        if resp.status_code == 200:
-            ResetBalanceResponse.model_validate(resp.json())
+        logger.info(f"Resetting balance for user-id: {self.user_id}")
+        resp = self.post("/api/reset-balance", headers=headers)
         return ResetBalanceResponse.model_validate(resp.json())
+
+    reset_balance = post_reset_balance

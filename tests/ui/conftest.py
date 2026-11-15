@@ -5,7 +5,6 @@ Page Objects via Factory, Screenplay Actors, and API-driven test isolation preco
 """
 
 import pytest
-from assertpy import assert_that
 from selenium import webdriver
 
 from framework.api.client import BettingApiClient
@@ -53,8 +52,4 @@ def driver(request: pytest.FixtureRequest) -> webdriver.Remote:
 def reset_balance_precondition(api_client: BettingApiClient):
     """Precondition: Ensure candidate user starts each test with a clean baseline balance."""
     logger.info("Precondition: Resetting user balance via API...")
-    resp = api_client.reset_balance()
-    assert_that(resp.status_code).described_as(
-        f"API reset balance failure: {resp.text}"
-    ).is_equal_to(200)
-    return
+    return api_client.reset_balance()
