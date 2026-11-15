@@ -112,3 +112,61 @@ class AuthError(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     error: Literal["missing_user_id", "invalid_user_id"]
+
+
+# ---------------------------------------------------------------------------
+# Strict HTTP Error Models (OpenAPI Example Schemas)
+# ---------------------------------------------------------------------------
+
+
+class Error400(BaseModel):
+    """Strict error schema for HTTP 400 Bad Request."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    error: Literal["invalid_request"] = "invalid_request"
+    message: Literal["Request body must be a JSON object."] = "Request body must be a JSON object."
+
+
+class Error401(BaseModel):
+    """Strict error schema for HTTP 401 Unauthorized."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    error: Literal["missing_user_id"] = "missing_user_id"
+
+
+class Error405(BaseModel):
+    """Strict error schema for HTTP 405 Method Not Allowed."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    error: Literal["insufficient_balance"] = "insufficient_balance"
+    message: Literal["Insufficient balance"] = "Insufficient balance"
+
+
+class Error409(BaseModel):
+    """Strict error schema for HTTP 409 Conflict."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    error: Literal["insufficient_balance"] = "insufficient_balance"
+    message: Literal["Insufficient balance"] = "Insufficient balance"
+
+
+class Error422(BaseModel):
+    """Strict error schema for HTTP 422 Unprocessable Entity."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    error: Literal["invalid_match_id"] = "invalid_match_id"
+    message: Literal["Match id is invalid."] = "Match id is invalid."
+
+
+class Error500(BaseModel):
+    """Strict error schema for HTTP 500 Internal Server Error."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    error: Literal["insufficient_balance"] = "insufficient_balance"
+    message: Literal["Insufficient balance"] = "Insufficient balance"

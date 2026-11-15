@@ -14,6 +14,12 @@ from framework.api.models import (
     AuthError,
     Balance,
     Error,
+    Error400,
+    Error401,
+    Error405,
+    Error409,
+    Error422,
+    Error500,
     Match,
     Odds,
     PlaceBetResponse,
@@ -142,6 +148,7 @@ class TestBettingApi:
 
         assert exc_info.value.status_code == 401
         assert exc_info.value.auth_error.error == "missing_user_id"
+        assert exc_info.value.strict_model == Error401()
 
     @allure.story("API-10: Authentication Failure - Invalid User ID (AuthError Schema Validation)")
     @allure.severity(allure.severity_level.CRITICAL)
@@ -168,6 +175,7 @@ class TestBettingApi:
 
         assert exc_info.value.status_code == 400
         assert exc_info.value.error.error == "invalid_request"
+        assert exc_info.value.strict_model == Error400()
 
     @allure.story("API-12: Reset User Balance & Schema Validation")
     @allure.severity(allure.severity_level.CRITICAL)
@@ -248,3 +256,63 @@ class TestBettingApi:
         # 7. AuthError model rejects extra fields
         with pytest.raises(ValidationError):
             AuthError.model_validate({"error": "missing_user_id", "extra_prop": "illegal"})
+
+        # 8. Strict Error400 validates exact contract and rejects invalid values
+        e400 = Error400.model_validate(
+            {"error": "invalid_request", "message": "Request body must be a JSON object."}
+        )
+        assert e400.error == "invalid_request"
+        assert e400.message == "Request body must be a JSON object."
+        with pytest.raises(ValidationError):
+            Error400.model_validate({"error": "invalid_request", "message": "Wrong message"})
+        with pytest.raises(ValidationError):
+            Error400.model_validate(
+                {
+                    "error": "invalid_request",
+                    "message": "Request body must be a JSON object.",
+                    "extra": "bad",
+                }
+            )
+
+        # 9. Strict Error401 validates exact contract and rejects invalid values
+        e401 = Error401.model_validate({"error": "missing_user_id"})
+        assert e401.error == "missing_user_id"
+        with pytest.raises(ValidationError):
+            Error401.model_validate(
+                {"error": "invalid_user_id"}
+            )  # Only missing_user_id allowed in Error401
+        with pytest.raises(ValidationError):
+            Error401.model_validate({"error": "missing_user_id", "extra": "bad"})
+
+        # 10. Strict Error405 validates exact contract and rejects invalid values
+        e405 = Error405.model_validate(
+            {"error": "insufficient_balance", "message": "Insufficient balance"}
+        )
+        assert e405.error == "insufficient_balance"
+        with pytest.raises(ValidationError):
+            Error405.model_validate({"error": "wrong", "message": "Insufficient balance"})
+
+        # 11. Strict Error409 validates exact contract and rejects invalid values
+        e409 = Error409.model_validate(
+            {"error": "insufficient_balance", "message": "Insufficient balance"}
+        )
+        assert e409.error == "insufficient_balance"
+        with pytest.raises(ValidationError):
+            Error409.model_validate({"error": "wrong", "message": "Insufficient balance"})
+
+        # 12. Strict Error422 validates exact contract and rejects invalid values
+        e422 = Error422.model_validate(
+            {"error": "invalid_match_id", "message": "Match id is invalid."}
+        )
+        assert e422.error == "invalid_match_id"
+        assert e422.message == "Match id is invalid."
+        with pytest.raises(ValidationError):
+            Error422.model_validate({"error": "wrong", "message": "Match id is invalid."})
+
+        # 13. Strict Error500 validates exact contract and rejects invalid values
+        e500 = Error500.model_validate(
+            {"error": "insufficient_balance", "message": "Insufficient balance"}
+        )
+        assert e500.error == "insufficient_balance"
+        with pytest.raises(ValidationError):
+            Error500.model_validate({"error": "wrong", "message": "Insufficient balance"})
