@@ -6,7 +6,7 @@ import pytest
 
 from framework.core.logger import get_logger
 
-logger = get_logger("TestsConftest")
+logger = get_logger()
 
 
 @pytest.fixture(autouse=True)

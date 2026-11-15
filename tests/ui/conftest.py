@@ -12,7 +12,7 @@ from framework.api.client import BettingApiClient
 from framework.core.logger import get_logger
 from framework.core.webdriver_factory import WebDriverFactory
 
-logger = get_logger("UIConftest")
+logger = get_logger()
 
 
 @pytest.fixture()

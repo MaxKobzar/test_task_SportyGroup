@@ -35,7 +35,7 @@ from framework.screenplay.tasks.place_bet import EnterStakeAmount, SubmitBetPlac
 from framework.screenplay.tasks.refresh_page import RefreshPage
 from framework.screenplay.tasks.select_outcome import SelectUpcomingMatchOutcome
 
-logger = get_logger("TestCriticalUserJourneyE2E")
+logger = get_logger()
 
 
 @allure.epic("Core Wagering Engine")

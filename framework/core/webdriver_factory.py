@@ -11,7 +11,7 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 
 from framework.core.logger import get_logger
 
-logger = get_logger("WebDriverFactory")
+logger = get_logger()
 
 
 class WebDriverFactory:

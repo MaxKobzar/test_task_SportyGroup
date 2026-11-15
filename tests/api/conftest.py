@@ -8,7 +8,7 @@ import pytest
 from framework.api.client import BettingApiClient
 from framework.core.logger import get_logger
 
-logger = get_logger("APIConftest")
+logger = get_logger()
 
 
 @pytest.fixture(autouse=True)

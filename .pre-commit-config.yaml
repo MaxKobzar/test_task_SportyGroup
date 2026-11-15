@@ -41,3 +41,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+  # 5. Guardrails & Anti-Pattern Prevention
+  - repo: local
+    hooks:
+      - id: prohibit-except-exception
+        name: prohibit 'except Exception'
+        entry: '^\s*except\s+(Exception|BaseException)\b'
+        language: pygrep
+        types: [python]

@@ -1,12 +1,13 @@
 """
 Data models for the Betting API using Pydantic V2.
 Directly aligns with the OpenAPI 3.0.3 specification from /api/docs.
+Enforces strict contract validation (extra="forbid") on all response models.
 """
 
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class SelectionType(str, Enum):
@@ -20,7 +21,7 @@ class SelectionType(str, Enum):
 class Odds(BaseModel):
     """Odds schema for a match outcome."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     home: float
     draw: float
@@ -30,7 +31,7 @@ class Odds(BaseModel):
 class Match(BaseModel):
     """Match schema as defined in OpenAPI components/schemas/Match."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     id: str
     competition: Optional[str] = None
@@ -44,14 +45,17 @@ class Match(BaseModel):
 class Balance(BaseModel):
     """User balance schema as defined in OpenAPI components/schemas/Balance."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     balance: float
     currency: str = "EUR"
 
 
 class PlaceBetRequest(BaseModel):
-    """Bet placement request schema as defined in OpenAPI components/schemas/PlaceBetRequest."""
+    """
+    Bet placement request schema as defined in OpenAPI components/schemas/PlaceBetRequest.
+    OpenAPI specifies additionalProperties: true (extra fields are ignored by server).
+    """
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
@@ -61,33 +65,42 @@ class PlaceBetRequest(BaseModel):
 
 
 class PlaceBetResponse(BaseModel):
-    """Bet placement response schema as defined in OpenAPI components/schemas/PlaceBetResponse."""
+    """
+    Bet placement response schema as defined in OpenAPI components/schemas/PlaceBetResponse.
+    Strictly forbids undocumented fields while accepting either 'balance' or 'newBalance'.
+    """
 
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    message: Optional[str] = None
-    match_id: Optional[str] = Field(default=None, alias="matchId")
-    selection: Optional[str] = None
-    stake: Optional[float] = None
-    odds: Optional[float] = None
-    payout: Optional[float] = None
-    balance: Optional[float] = Field(
-        default=None, alias="newBalance"
-    )  # supports both Swagger 'balance' and API 'newBalance'
-    currency: Optional[str] = "EUR"
-    error: Optional[str] = None
-    success: Optional[bool] = None
+    message: str
+    match_id: str = Field(alias="matchId")
+    selection: str
+    stake: float
+    odds: float
+    payout: float
+    balance: float = Field(validation_alias=AliasChoices("balance", "newBalance"))
+    currency: str = "EUR"
 
     @property
-    def new_balance(self) -> Optional[float]:
+    def new_balance(self) -> float:
         """Backward-compatible alias for balance / newBalance."""
         return self.balance
+
+
+class ResetBalanceResponse(BaseModel):
+    """Reset balance response schema as defined in OpenAPI /api/reset-balance."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    message: str
+    balance: float
+    currency: str = "EUR"
 
 
 class Error(BaseModel):
     """Semantic validation and server error schema as defined in OpenAPI components/schemas/Error."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     error: str
     message: str
@@ -96,6 +109,6 @@ class Error(BaseModel):
 class AuthError(BaseModel):
     """Authentication failure schema as defined in OpenAPI components/schemas/AuthError."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     error: Literal["missing_user_id", "invalid_user_id"]

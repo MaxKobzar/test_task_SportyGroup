@@ -6,6 +6,11 @@ Provides reusable methods, explicit waits, and resilient element interactions.
 from typing import List, Optional, Tuple
 
 from selenium import webdriver
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    TimeoutException,
+    WebDriverException,
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
@@ -13,7 +18,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from framework.core.logger import get_logger
 
-logger = get_logger("BasePage")
+logger = get_logger()
 
 
 class BasePage:
@@ -54,7 +59,7 @@ class BasePage:
         try:
             wait.until(EC.presence_of_element_located(locator))
             return self.driver.find_elements(*locator)
-        except Exception:
+        except (TimeoutException, NoSuchElementException, WebDriverException):
             return []
 
     def click(self, locator: Tuple[By, str], timeout: Optional[int] = None) -> None:
@@ -88,7 +93,7 @@ class BasePage:
         try:
             WebDriverWait(self.driver, timeout).until(EC.visibility_of_element_located(locator))
             return True
-        except Exception:
+        except (TimeoutException, NoSuchElementException, WebDriverException):
             return False
 
     def wait_for_invisibility(self, locator: Tuple[By, str], timeout: int = 5) -> bool:
@@ -97,5 +102,5 @@ class BasePage:
             return WebDriverWait(self.driver, timeout).until(
                 EC.invisibility_of_element_located(locator)
             )
-        except Exception:
+        except (TimeoutException, NoSuchElementException, WebDriverException):
             return False

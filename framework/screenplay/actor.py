@@ -10,7 +10,7 @@ import allure
 from framework.core.logger import get_logger
 
 TAbility = TypeVar("TAbility")
-logger = get_logger("ScreenplayActor")
+logger = get_logger()
 
 
 class Actor:

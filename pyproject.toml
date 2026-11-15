@@ -35,6 +35,7 @@ select = [
     "T10",  # debugger calls (breakpoint, pdb)
     "T20",  # print statements
     "B",    # flake8-bugbear
+    "BLE",  # flake8-blind-except (prohibits blind except Exception)
 ]
 ignore = [
     "PT009", # Allow assertpy / custom assertions alongside standard asserts

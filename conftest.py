@@ -11,14 +11,31 @@ from dataclasses import dataclass
 import allure
 import pytest
 from dotenv import load_dotenv
+from selenium.common.exceptions import WebDriverException
 
 from framework.api.client import BettingApiClient
-from framework.core.logger import get_logger
+from framework.core.logger import DATE_FORMAT, LOG_FORMAT, get_logger
 
 # Load environment configuration from .env file
 load_dotenv()
 
-logger = get_logger("RootConftest")
+logger = get_logger()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config):
+    """
+    Single point of logger configuration for all test runs (CLI, PyCharm, CI).
+
+    Ensures consistent log formatting starting with: timestamp, filename, log level, log message,
+    even when pytest is executed from sub-directories or through IDE test runners.
+    """
+    config.option.log_cli = True
+    config.option.log_cli_level = "INFO"
+    config.option.log_cli_format = LOG_FORMAT
+    config.option.log_cli_date_format = DATE_FORMAT
+    config.option.log_format = LOG_FORMAT
+    config.option.log_date_format = DATE_FORMAT
 
 
 def pytest_addoption(parser):
@@ -150,7 +167,7 @@ def pytest_runtest_makereport(item, call):
                     from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 
                     driver = actor.ability_to(BrowseTheWeb).driver
-                except Exception:
+                except (KeyError, AttributeError, ValueError):
                     pass
 
         # 1. Capture browser screenshot in case of failed UI test
@@ -163,7 +180,7 @@ def pytest_runtest_makereport(item, call):
                     attachment_type=allure.attachment_type.PNG,
                 )
                 logger.info(f"Attached failure screenshot for {item.name}")
-            except Exception as ex:
+            except (WebDriverException, OSError) as ex:
                 logger.warning(f"Could not capture failure screenshot: {ex}")
 
             # 2. Capture page_source of the failed page
@@ -175,7 +192,7 @@ def pytest_runtest_makereport(item, call):
                     attachment_type=allure.attachment_type.HTML,
                 )
                 logger.info(f"Attached failure page_source for {item.name}")
-            except Exception as ex:
+            except (WebDriverException, OSError) as ex:
                 logger.warning(f"Could not capture page_source: {ex}")
 
         # 3. Log of execution of current test
@@ -190,5 +207,5 @@ def pytest_runtest_makereport(item, call):
             )
             logger.info(f"Attached execution log for {item.name}")
             # Application log also added here
-        except Exception as ex:
+        except (AttributeError, TypeError, OSError) as ex:
             logger.warning(f"Could not capture execution log: {ex}")

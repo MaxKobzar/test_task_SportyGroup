@@ -1,89 +1,217 @@
 """
-HTTP Client for the Betting Application REST API.
+HTTP Client architecture for REST API interaction.
+Provides BaseClient for session and telemetry management,
+and domain-specific BettingApiClient for betting operations.
 """
 
 import json
-from typing import List
+from typing import Any, List, Optional
 
 import allure
 import requests
 
 from framework.api.models import (
+    AuthError,
     Balance,
+    Error,
     Match,
     PlaceBetResponse,
+    ResetBalanceResponse,
 )
 from framework.core.logger import get_logger
 
-logger = get_logger("ApiClient")
+logger = get_logger()
 
 
-class BettingApiClient:
-    """REST API Client for interacting with the Sporty Betting Backend."""
+class BaseClient:
+    """Generic REST API Client providing session management, HTTP wrappers, and Allure telemetry."""
 
-    def __init__(self, base_url: str, user_id: str):
+    def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
-        self.user_id = user_id
         self.session = requests.Session()
         self.session.headers.update(
             {
-                "x-user-id": self.user_id,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
                 "User-Agent": "Sporty-QA-Automation-Framework",
             }
         )
+        # Register automated Allure reporting hook for all session requests/responses
+        self.session.hooks["response"].append(self._allure_http_hook)
 
-    def _attach_to_allure(self, name: str, data: str, mime: str = "application/json"):
+    @staticmethod
+    def _allure_http_hook(
+        response: requests.Response, *args: Any, **kwargs: Any
+    ) -> requests.Response:
+        """
+        Automated Session Hook: Intercepts all outgoing requests and incoming responses,
+        attaching formatted wire-level telemetry to Allure reports.
+        """
         try:
-            allure.attach(
-                data,
-                name=name,
-                attachment_type=allure.attachment_type.JSON
-                if mime == "application/json"
-                else allure.attachment_type.TEXT,
-            )
-        except Exception:
-            pass
+            req = response.request
+            method = req.method or "HTTP"
+            status = response.status_code
+            elapsed_ms = int(response.elapsed.total_seconds() * 1000)
+
+            step_title = f"HTTP {method} {req.path_url} [{status}] ({elapsed_ms}ms)"
+            with allure.step(step_title):
+                # 1. Attach Request Payload (if present)
+                if req.body:
+                    raw_body = (
+                        req.body.decode("utf-8") if isinstance(req.body, bytes) else str(req.body)
+                    )
+                    try:
+                        formatted_req = json.dumps(json.loads(raw_body), indent=2)
+                        attach_type = allure.attachment_type.JSON
+                    except (ValueError, TypeError):
+                        formatted_req = raw_body
+                        attach_type = allure.attachment_type.TEXT
+
+                    allure.attach(
+                        formatted_req,
+                        name=f"Request Body: {method} {req.path_url}",
+                        attachment_type=attach_type,
+                    )
+
+                # 2. Attach Response Payload (if present)
+                if response.text:
+                    try:
+                        formatted_res = json.dumps(response.json(), indent=2)
+                        attach_type = allure.attachment_type.JSON
+                    except (ValueError, TypeError):
+                        formatted_res = response.text
+                        attach_type = allure.attachment_type.TEXT
+
+                    allure.attach(
+                        formatted_res,
+                        name=f"Response Body: [{status}] ({elapsed_ms}ms)",
+                        attachment_type=attach_type,
+                    )
+        except (TypeError, ValueError, AttributeError, OSError) as ex:
+            logger.debug(f"Could not attach HTTP telemetry to Allure: {ex}")
+
+        return response
+
+    def _build_url(self, endpoint: str) -> str:
+        """Construct full absolute URL from endpoint path."""
+        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+            return endpoint
+        return f"{self.base_url}/{endpoint.lstrip('/')}"
+
+    def get(
+        self,
+        endpoint: str,
+        params: Optional[dict] = None,
+        headers: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> requests.Response:
+        """Execute GET request with automated telemetry and optional header overrides."""
+        url = self._build_url(endpoint)
+        logger.info(f"GET {url}")
+        return self.session.get(url, params=params, headers=headers, **kwargs)
+
+    def post(
+        self,
+        endpoint: str,
+        data: Optional[Any] = None,
+        json: Optional[Any] = None,
+        headers: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> requests.Response:
+        """Execute POST request with automated telemetry and optional header overrides."""
+        url = self._build_url(endpoint)
+        logger.info(f"POST {url}")
+        return self.session.post(url, data=data, json=json, headers=headers, **kwargs)
+
+    def put(
+        self,
+        endpoint: str,
+        data: Optional[Any] = None,
+        json: Optional[Any] = None,
+        headers: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> requests.Response:
+        """Execute PUT request with automated telemetry and optional header overrides."""
+        url = self._build_url(endpoint)
+        logger.info(f"PUT {url}")
+        return self.session.put(url, data=data, json=json, headers=headers, **kwargs)
+
+    def delete(
+        self,
+        endpoint: str,
+        headers: Optional[dict] = None,
+        **kwargs: Any,
+    ) -> requests.Response:
+        """Execute DELETE request with automated telemetry and optional header overrides."""
+        url = self._build_url(endpoint)
+        logger.info(f"DELETE {url}")
+        return self.session.delete(url, headers=headers, **kwargs)
+
+
+class BettingApiClient(BaseClient):
+    """REST API Client for interacting with the Sporty Betting Backend."""
+
+    def __init__(self, base_url: str, user_id: str):
+        super().__init__(base_url=base_url)
+        self.user_id = user_id
+        self.session.headers.update({"x-user-id": self.user_id})
 
     def get_balance(self) -> Balance:
         """Fetch current user balance as defined in OpenAPI Balance schema."""
-        url = f"{self.base_url}/api/balance"
-        logger.info(f"GET {url} [user-id: {self.user_id}]")
-        resp = self.session.get(url)
-        self._attach_to_allure("GET /api/balance response", resp.text)
+        logger.info(f"Fetching balance for user-id: {self.user_id}")
+        resp = self.get("/api/balance")
         resp.raise_for_status()
         return Balance.model_validate(resp.json())
 
     def get_matches(self) -> List[Match]:
-        """Fetch list of available matches."""
-        url = f"{self.base_url}/api/matches"
-        logger.info(f"GET {url}")
-        resp = self.session.get(url)
-        self._attach_to_allure("GET /api/matches response", resp.text)
+        """Fetch list of available matches and strictly validate schema."""
+        resp = self.get("/api/matches")
         resp.raise_for_status()
         return [Match.model_validate(m) for m in resp.json()]
 
-    def place_bet_raw(self, match_id: str, selection: str, stake: float) -> requests.Response:
-        """Send raw bet placement request to inspect status codes and validation messages."""
-        url = f"{self.base_url}/api/place-bet"
-        payload = {"matchId": match_id, "selection": selection, "stake": stake}
-        logger.info(f"POST {url} with payload {payload}")
-        self._attach_to_allure("POST /api/place-bet request", json.dumps(payload, indent=2))
-        resp = self.session.post(url, json=payload)
-        self._attach_to_allure(f"POST /api/place-bet response ({resp.status_code})", resp.text)
-        return resp
+    def place_bet_raw(
+        self,
+        match_id: Optional[str] = None,
+        selection: Optional[str] = None,
+        stake: Optional[float] = None,
+        custom_payload: Optional[Any] = None,
+        headers: Optional[dict] = None,
+    ) -> requests.Response:
+        """Send raw bet placement request to inspect status codes, error schemas, and validation."""
+        payload = (
+            custom_payload
+            if custom_payload is not None
+            else {"matchId": match_id, "selection": selection, "stake": stake}
+        )
+
+        if isinstance(payload, str):
+            return self.post("/api/place-bet", data=payload, headers=headers)
+        return self.post("/api/place-bet", json=payload, headers=headers)
 
     def place_bet(self, match_id: str, selection: str, stake: float) -> PlaceBetResponse:
-        """Place bet and parse standard OpenAPI PlaceBetResponse."""
+        """Place bet and strictly parse/validate OpenAPI PlaceBetResponse."""
         resp = self.place_bet_raw(match_id=match_id, selection=selection, stake=stake)
         resp.raise_for_status()
         return PlaceBetResponse.model_validate(resp.json())
 
     def reset_balance(self) -> requests.Response:
-        """Reset user balance to default value (125.50)."""
-        url = f"{self.base_url}/api/reset-balance"
-        logger.info(f"POST {url} [user-id: {self.user_id}]")
-        resp = self.session.post(url)
-        self._attach_to_allure("POST /api/reset-balance response", resp.text)
+        """Reset user balance to default value (125.50) and validate schema."""
+        logger.info(f"Resetting balance for user-id: {self.user_id}")
+        resp = self.post("/api/reset-balance")
+        if resp.status_code == 200:
+            ResetBalanceResponse.model_validate(resp.json())
         return resp
+
+    def reset_balance_model(self) -> ResetBalanceResponse:
+        """Reset balance and return validated ResetBalanceResponse."""
+        resp = self.reset_balance()
+        resp.raise_for_status()
+        return ResetBalanceResponse.model_validate(resp.json())
+
+    def parse_error(self, response: requests.Response) -> Error:
+        """Parse and strictly schema-validate an Error response."""
+        return Error.model_validate(response.json())
+
+    def parse_auth_error(self, response: requests.Response) -> AuthError:
+        """Parse and strictly schema-validate an AuthError response."""
+        return AuthError.model_validate(response.json())

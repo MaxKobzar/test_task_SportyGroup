@@ -7,7 +7,11 @@ import re
 from typing import Dict, Optional
 
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    TimeoutException,
+    WebDriverException,
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -15,7 +19,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from framework.core.logger import get_logger
 from framework.pages.base_page import BasePage
 
-logger = get_logger("BettingPage")
+logger = get_logger()
 
 
 class BettingPage(BasePage):
@@ -223,7 +227,7 @@ class BettingPage(BasePage):
                     (By.CSS_SELECTOR, ".placeBetButtonPlacing, .spinner")
                 )
             )
-        except Exception:
+        except (TimeoutException, NoSuchElementException, WebDriverException):
             pass
         return self
 
@@ -234,7 +238,7 @@ class BettingPage(BasePage):
                 EC.visibility_of_element_located(self.LOC_MODAL_ROOT)
             )
             return True
-        except Exception:
+        except (TimeoutException, NoSuchElementException, WebDriverException):
             # Fallback to close button check
             return self.is_visible(self.LOC_MODAL_CLOSE_BTN, timeout=timeout)
 
@@ -270,7 +274,7 @@ class BettingPage(BasePage):
             WebDriverWait(self.driver, 5).until(
                 EC.invisibility_of_element_located(self.LOC_MODAL_ROOT)
             )
-        except Exception:
+        except (TimeoutException, NoSuchElementException, WebDriverException):
             pass
         return self
 
