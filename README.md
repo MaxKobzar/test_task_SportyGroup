@@ -159,9 +159,11 @@ poetry run pytest --base-url "https://qae-assignment-tau.vercel.app" --user-id "
 
 ### 3. Generating & Viewing Allure Report
 ```bash
-# Generate report from collected test artifacts
-allure generate allure-results -o allure-report --clean
+# Each run writes to reports/allure-results (anchored to the project root, cleared per run)
+# Generate the HTML report and open it in the browser
+allure generate reports/allure-results -o reports/allure-report --clean
+allure open reports/allure-report
 
-# Open report in browser
-allure open allure-report
+# Or build and open in one step
+allure serve reports/allure-results
 ```

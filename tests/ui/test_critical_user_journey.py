@@ -66,7 +66,7 @@ class TestSingleBetCriticalUserJourney:
             "BUG-009 receipt omits the selection; BUG-005 header balance not updated"
         ),
     )
-    def test_bettor_places_single_bet_and_receives_accurate_receipt(
+    def test_bettor_places_single_bet_and_receives_receipt(
         self, bettor_actor: Actor, target_match: Match
     ) -> None:
         bet: PlaceBetRequest = BetMother.home_bet(match_id=target_match.id)

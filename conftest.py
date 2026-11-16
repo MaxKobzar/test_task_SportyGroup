@@ -37,6 +37,13 @@ def pytest_configure(config):
     config.option.log_format = LOG_FORMAT
     config.option.log_date_format = DATE_FORMAT
 
+    # Anchor --alluredir to the project root: a relative path would otherwise resolve against
+    # the working directory, so IDE runs from tests/api or tests/ui scatter results there.
+    # Runs before allure-pytest's own pytest_configure (tryfirst), which opens the directory.
+    alluredir = config.getoption("allure_report_dir", None)
+    if alluredir and not os.path.isabs(alluredir):
+        config.option.allure_report_dir = str(config.rootpath / alluredir)
+
 
 def pytest_addoption(parser):
     """Register custom command-line options with fallback defaults from .env."""
