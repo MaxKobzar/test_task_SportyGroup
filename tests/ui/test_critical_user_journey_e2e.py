@@ -6,23 +6,25 @@ Title: Complete Wager Lifecycle on an Upcoming Event with UI Balance Reconciliat
 Architecture:
 Implements 'The Ideal Synergy':
 - Pure black-box UI automation simulating a realistic bettor journey in Desktop Chrome.
-- Function-level WebDriver configured via parsed pytest_addoption and .env.
-- Config-free framework (framework/config removed; runtime parameters from .env and pytest_addoption).
+- Preconditions strictly encapsulated in conftest.py (reset_balance_precondition, bettor_actor, target_match).
+- Test data manufactured via Object Mother pattern parameterized across canonical archetypes (BetMother.home_bet, draw_bet, away_bet).
+- Config-free framework (runtime parameters from .env and pytest_addoption).
 - Assertions executed strictly via assertpy (assert_that) with soft_assertions for composite checks.
 - The Actor performs high-level business tasks and asks questions through abilities,
   where BrowseTheWeb delegates directly to PageFactory.get_page(PageType.BETTING, driver).
-- Backend state isolation (reset_balance_precondition) handled cleanly in background fixtures.
 """
 
 import re
+from typing import Callable
 
 import allure
 import pytest
 from assertpy import assert_that, soft_assertions
 
+from framework.api.models import Match, PlaceBetRequest
 from framework.core.logger import get_logger
+from framework.data.bet_mother import BetMother
 from framework.pages.betting_page import BettingPage
-from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 from framework.screenplay.actor import Actor
 from framework.screenplay.questions.bet_receipt import IsReceiptModalDisplayed, ReceiptDetails
 from framework.screenplay.questions.bet_slip_status import IsBetSlipEmpty
@@ -54,14 +56,25 @@ class TestSingleCriticalUserJourneyE2E:
     6. Dismiss receipt and confirm Bet Slip resets to empty state.
     7. Reconcile UI header balance: confirm balance is debited by the exact stake amount.
     """)
+    @pytest.mark.parametrize(
+        "bet_factory",
+        [
+            BetMother.home_bet,
+            BetMother.draw_bet,
+            BetMother.away_bet,
+        ],
+        ids=["home_bet", "draw_bet", "away_bet"],
+    )
     def test_bettor_completes_critical_user_journey(
         self,
-        driver,
+        bettor_actor: Actor,
+        bet_factory: Callable[..., PlaceBetRequest],
+        target_match: Match,
     ):
-        stake_amount = 10.00
-
-        # Equip Screenplay Actor with Desktop Chrome WebDriver ability
-        bettor_actor = Actor.named("Bettor").can(BrowseTheWeb.with_driver(driver))
+        # ----------------------------------------------------------------------
+        # Data Input: Canonical Wager Manufactured via BetMother
+        # ----------------------------------------------------------------------
+        bet_data: PlaceBetRequest = bet_factory(match_id=target_match.id)
 
         # ----------------------------------------------------------------------
         # Phase 1: Pre-State & UI Baseline Check
@@ -74,7 +87,7 @@ class TestSingleCriticalUserJourneyE2E:
             with soft_assertions():
                 assert_that(ui_balance_before).described_as(
                     "Initial UI balance sufficiency for stake"
-                ).is_greater_than_or_equal_to(stake_amount)
+                ).is_greater_than_or_equal_to(bet_data.stake)
                 assert_that(bettor_actor.asks_for(IsBetSlipEmpty.check())).described_as(
                     "Initial Bet Slip empty state"
                 ).is_true()
@@ -82,8 +95,10 @@ class TestSingleCriticalUserJourneyE2E:
         # ----------------------------------------------------------------------
         # Phase 2: Catalog Browsing & Upcoming Match Selection
         # ----------------------------------------------------------------------
-        with allure.step("Phase 2: Browse & Select Outcome on an UPCOMING Match"):
-            select_task = SelectUpcomingMatchOutcome.for_outcome("HOME")
+        with allure.step(
+            f"Phase 2: Browse & Select Outcome '{bet_data.selection.value}' on an UPCOMING Match"
+        ):
+            select_task = SelectUpcomingMatchOutcome.for_outcome(bet_data.selection.value)
             bettor_actor.attempts_to(select_task)
             selected_meta = select_task.selected_meta
             decimal_odds = float(selected_meta["odds"])
@@ -95,10 +110,10 @@ class TestSingleCriticalUserJourneyE2E:
         # Phase 3: Bet Slip Staging & Dynamic Payout Computation
         # ----------------------------------------------------------------------
         with allure.step("Phase 3: Verify Bet Slip Staging & Dynamic Calculation"):
-            bettor_actor.attempts_to(EnterStakeAmount.of(stake_amount))
+            bettor_actor.attempts_to(EnterStakeAmount.of(bet_data.stake))
 
             # Validate dynamic payout calculation: stake * odds
-            expected_payout = round(stake_amount * decimal_odds, 2)
+            expected_payout = round(bet_data.stake * decimal_odds, 2)
             calculated_payout = bettor_actor.asks_for(PotentialPayout.value())
 
             with soft_assertions():
@@ -123,7 +138,7 @@ class TestSingleCriticalUserJourneyE2E:
         # ----------------------------------------------------------------------
         with allure.step("Phase 5: Verify Contractual Confirmation Receipt Modal"):
             receipt = bettor_actor.asks_for(ReceiptDetails.data())
-            expected_stake_str = f"€{stake_amount:.2f}"
+            expected_stake_str = f"€{bet_data.stake:.2f}"
             payout_match = re.search(r"[-+]?\d*\.?\d+", receipt["payout"])
             receipt_payout_num = float(payout_match.group()) if payout_match else 0.0
 
@@ -172,7 +187,7 @@ class TestSingleCriticalUserJourneyE2E:
         # Phase 7: UI Balance Deduction Verification
         # ----------------------------------------------------------------------
         with allure.step("Phase 7: Reconcile Header Balance Deduction After Bet Placement"):
-            expected_balance = round(ui_balance_before - stake_amount, 2)
+            expected_balance = round(ui_balance_before - bet_data.stake, 2)
 
             # UI Header balance deduction check (synced with page reload)
             bettor_actor.attempts_to(RefreshPage.now())

@@ -48,8 +48,8 @@ sporty_group/
 └── tests/
     ├── conftest.py                    # Shared test suite fixtures (lifecycle logging, reset_balance_precondition)
     ├── ui/
-    │   ├── conftest.py                # UI fixtures (driver)
-    │   └── test_critical_user_journey_e2e.py # Sole E2E UI critical user journey (Screenplay)
+    │   ├── conftest.py                # UI fixtures (driver, bettor_actor Screenplay Actor)
+    │   └── test_critical_user_journey_e2e.py # Sole E2E UI critical user journey (Screenplay + BetMother)
     └── api/
         ├── conftest.py                # API fixtures (api_actor Screenplay Actor)
         └── test_bet_placement_api.py  # Sole REST API test suite (Screenplay + BetMother)
@@ -83,8 +83,8 @@ sporty_group/
 ### 3. Hierarchical `conftest.py` Layout
 - **Root `conftest.py`**: Handles CLI inputs, global session fixtures (`test_config`, `api_client`), and the failure triage hook.
 - **`tests/conftest.py`**: Shared test suite fixtures (`log_test_lifecycle`, `reset_balance_precondition` state isolation).
-- **`tests/ui/conftest.py`**: Manages browser lifecycle (`driver`).
-- **`tests/api/conftest.py`**: Provides Screenplay Actor (`api_actor`) with API calling ability.
+- **`tests/ui/conftest.py`**: Manages browser lifecycle (`driver`) and UI Screenplay Actor (`bettor_actor`).
+- **`tests/api/conftest.py`**: Provides REST API Screenplay Actor (`api_actor`).
 
 ### 4. CLI Point of Input (`pytest_addoption`)
 Configurable flags supported:
