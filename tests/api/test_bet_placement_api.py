@@ -19,7 +19,7 @@ import allure
 import pytest
 from assertpy import assert_that, soft_assertions
 
-from framework.api.models import Balance, PlaceBetRequest, PlaceBetResponse
+from framework.api.models import Balance, Match, PlaceBetRequest, PlaceBetResponse
 from framework.core.logger import get_logger
 from framework.data.bet_mother import BetMother
 from framework.screenplay.actor import Actor
@@ -63,9 +63,7 @@ class TestBetPlacementApi:
         ids=["home_bet", "draw_bet", "away_bet"],
     )
     def test_bettor_places_single_bet_validates_business_rules_and_ledger_invariance(
-        self,
-        api_actor: Actor,
-        bet_factory: Callable[..., PlaceBetRequest],
+        self, api_actor: Actor, bet_factory: Callable[..., PlaceBetRequest], target_match: Match
     ) -> None:
         stake_amount = BetMother.DEFAULT_STAKE
 
@@ -90,8 +88,6 @@ class TestBetPlacementApi:
         with allure.step("Phase 2: Retrieve Active Matches Feed & Select Target Fixture"):
             matches = api_actor.asks_for(ApiMatchesFeed.all())
             assert_that(matches).described_as("Active match catalog feed").is_not_empty()
-
-            target_match = matches[0]
 
         # ----------------------------------------------------------------------
         # Phase 3: Manufacture Test Data via Object Mother & Execute Placement

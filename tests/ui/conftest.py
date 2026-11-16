@@ -4,13 +4,9 @@ Provides function-level WebDriver instances, Screenplay actors,
 and test data fixtures configurable via parsed pytest_addoption and WebDriverFactory.
 """
 
-from datetime import date
-
 import pytest
 from selenium import webdriver
 
-from framework.api.client import BettingApiClient
-from framework.api.models import Match
 from framework.core.logger import get_logger
 from framework.core.webdriver_factory import WebDriverFactory
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
@@ -61,18 +57,3 @@ def bettor_actor(driver: webdriver.Remote) -> Actor:
     """
     logger.info("Precondition: Initializing Bettor Actor with BrowseTheWeb ability...")
     return Actor.named("Bettor").can(BrowseTheWeb.with_driver(driver))
-
-
-@pytest.fixture()
-def target_match(api_client: BettingApiClient) -> Match:
-    """
-    Precondition: Dynamically resolve an active upcoming match fixture from the live catalog.
-    Prevents test flakiness from hardcoded fixture IDs or stale events.
-    """
-    matches = api_client.get_matches()
-    for match in matches:
-        if match.kickoff_date >= date.today():
-            return match
-    if not matches:
-        raise RuntimeError("Live match catalog feed returned no fixtures.")
-    return matches[0]
