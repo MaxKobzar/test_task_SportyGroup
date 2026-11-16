@@ -6,3 +6,5 @@ venv/
 allure-results/
 allure-report/
 poetry.lock
+.DS_Store
+*.DS_Store

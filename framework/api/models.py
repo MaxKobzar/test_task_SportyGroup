@@ -19,6 +19,9 @@ class SelectionType(str, Enum):
     AWAY = "AWAY"
 
 
+OutcomeSelection = SelectionType
+
+
 class Odds(BaseModel):
     """Odds schema for a match outcome."""
 
@@ -39,6 +42,20 @@ class Odds(BaseModel):
         gt=1.0,
         description="Decimal odds for away team victory",
     )
+
+    def for_selection(self, selection: str) -> float:
+        """Resolve decimal odds dynamically by outcome selection name ('HOME', 'DRAW', 'AWAY')."""
+        mapping = {
+            "HOME": self.home,
+            "DRAW": self.draw,
+            "AWAY": self.away,
+        }
+        key = selection.upper()
+        if key not in mapping:
+            raise ValueError(
+                f"Invalid outcome selection '{selection}'. Expected one of: {list(mapping.keys())}"
+            )
+        return mapping[key]
 
 
 class Match(BaseModel):
