@@ -1,41 +1,26 @@
 """
-Screenplay Tasks: SelectOutcome & SelectUpcomingMatchOutcome.
+Screenplay Task: SelectMatchOutcome.
 """
 
-from typing import Dict
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 
 
-class SelectOutcome:
-    """Task to select a specific match outcome by index."""
+class SelectMatchOutcome:
+    """Task to select an outcome (HOME/DRAW/AWAY) on the match with the given catalog ID."""
 
-    def __init__(self, outcome: str = "HOME", match_index: int = 0):
+    def __init__(self, match_id: str, outcome: str):
+        self.match_id = match_id
         self.outcome = outcome
-        self.match_index = match_index
 
     @classmethod
-    def on_match(cls, match_index: int = 0, outcome: str = "HOME") -> "SelectOutcome":
-        return cls(outcome=outcome, match_index=match_index)
+    def on(cls, match_id: str, outcome: str) -> "SelectMatchOutcome":
+        return cls(match_id=match_id, outcome=outcome)
 
     def perform_as(self, actor) -> None:
         browser = actor.ability_to(BrowseTheWeb)
         page = browser.on_betting_page()
-        page.select_outcome(outcome=self.outcome, match_index=self.match_index)
-
-
-class SelectUpcomingMatchOutcome:
-    """Task to locate an upcoming match and select the requested outcome."""
-
-    def __init__(self, outcome: str = "HOME"):
-        self.outcome = outcome
-        self.selected_meta: Dict[str, str] = {}
-
-    @classmethod
-    def for_outcome(cls, outcome: str = "HOME") -> "SelectUpcomingMatchOutcome":
-        return cls(outcome=outcome)
-
-    def perform_as(self, actor) -> None:
-        browser = actor.ability_to(BrowseTheWeb)
-        page = browser.on_betting_page()
-        self.selected_meta = page.select_upcoming_match_outcome(outcome=self.outcome)
+        page.click((By.ID, f"odds-{self.match_id}-{self.outcome.lower()}"))
+        page.wait.until(EC.visibility_of_element_located(page.LOC_STAKE_INPUT))
