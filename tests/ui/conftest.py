@@ -52,4 +52,4 @@ def driver(request: pytest.FixtureRequest) -> webdriver.Remote:
 def reset_balance_precondition(api_client: BettingApiClient):
     """Precondition: Ensure candidate user starts each test with a clean baseline balance."""
     logger.info("Precondition: Resetting user balance via API...")
-    return api_client.reset_balance()
+    return api_client.post_reset_balance()

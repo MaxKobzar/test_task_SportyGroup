@@ -5,7 +5,7 @@ Enforces strict contract validation (extra="forbid") on all response models.
 """
 
 from enum import Enum
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -34,12 +34,11 @@ class Match(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     id: str
-    competition: Optional[str] = None
+    competition: str = Field(alias="competition")
     home_team: str = Field(alias="homeTeam")
     away_team: str = Field(alias="awayTeam")
     kickoff_date: str = Field(alias="kickoffDate")
     odds: Odds
-    status: Optional[str] = None  # UI match status indicator (UPCOMING / PAST)
 
 
 class Balance(BaseModel):
@@ -115,7 +114,7 @@ class AuthError(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Strict HTTP Error Models (OpenAPI Example Schemas)
+# OpenAPI Example Schemas HTTP Error Models
 # ---------------------------------------------------------------------------
 
 

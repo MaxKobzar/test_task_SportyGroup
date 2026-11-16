@@ -15,4 +15,4 @@ logger = get_logger()
 def reset_api_state(api_client: BettingApiClient):
     """Ensure baseline user state is restored before every API test execution."""
     logger.info("Resetting backend user state prior to API test...")
-    return api_client.reset_balance()
+    return api_client.post_reset_balance()

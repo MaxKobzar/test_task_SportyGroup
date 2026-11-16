@@ -8,7 +8,7 @@ from framework.api.exceptions import (
     ApiException,
     ApiHttpError,
     ApiValidationError,
-    raise_api_error,
+    validate_rest_error,
 )
 from framework.api.models import (
     AuthError,
@@ -29,7 +29,7 @@ __all__ = [
     "ApiValidationError",
     "ApiAuthError",
     "ApiHttpError",
-    "raise_api_error",
+    "validate_rest_error",
     "AuthError",
     "Balance",
     "Error",

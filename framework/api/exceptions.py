@@ -6,7 +6,8 @@ that encapsulate status codes, raw responses, and parsed Pydantic error models.
 Follows DRY and KISS principles with a single unified constructor.
 """
 
-from typing import Dict, Optional, Type, Union
+from functools import wraps
+from typing import Any, Callable, Dict, Optional, Type, Union
 
 import requests
 from pydantic import BaseModel, ValidationError
@@ -200,10 +201,21 @@ class ApiHttpError(ApiException):
     title = "Unexpected Error"
 
 
-def raise_api_error(response: requests.Response) -> None:
-    """
-    Inspect HTTP response status and raise typed domain exception for non-2xx responses.
-    """
-    if 200 <= response.status_code < 300:
-        return
-    raise ApiException.from_response(response)
+def validate_rest_error(target: Any = None) -> Any:
+    """Decorator or validator raising ApiException on non-2xx responses."""
+
+    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            resp = fn(*args, **kwargs)
+            if hasattr(resp, "status_code") and not (200 <= resp.status_code < 300):
+                raise ApiException.from_response(resp)
+            return resp
+
+        return wrapper
+
+    if hasattr(target, "status_code"):
+        if not (200 <= target.status_code < 300):
+            raise ApiException.from_response(target)
+        return target
+    return decorator(target) if callable(target) else decorator

@@ -15,4 +15,4 @@ class ResetBalanceViaApi:
 
     def perform_as(self, actor) -> None:
         api = actor.ability_to(CallAPI)
-        api.client.reset_balance()
+        api.client.post_reset_balance()

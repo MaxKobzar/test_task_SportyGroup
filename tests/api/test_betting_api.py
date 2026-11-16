@@ -62,7 +62,7 @@ class TestBettingApi:
         target_match = matches[0]
         stake = 10.00
 
-        bet_model: PlaceBetResponse = api_client.place_bet(
+        bet_model: PlaceBetResponse = api_client.post_place_bet(
             match_id=target_match.id, selection="HOME", stake=stake
         )
         assert bet_model.message == "Bet placed successfully"
@@ -80,7 +80,9 @@ class TestBettingApi:
     def test_place_bet_invalid_match_id(self, api_client: BettingApiClient):
         """Verify placing a bet on an invalid match ID raises ApiValidationError with Error schema."""
         with pytest.raises(ApiValidationError) as exc_info:
-            api_client.place_bet(match_id="non-existent-match-9999", selection="HOME", stake=10.00)
+            api_client.post_place_bet(
+                match_id="non-existent-match-9999", selection="HOME", stake=10.00
+            )
 
         assert exc_info.value.status_code == 422
         assert exc_info.value.error.error == "invalid_match"
@@ -92,7 +94,9 @@ class TestBettingApi:
         """Verify invalid selection raises ApiValidationError with Error schema."""
         matches = api_client.get_matches()
         with pytest.raises(ApiValidationError) as exc_info:
-            api_client.place_bet(match_id=matches[0].id, selection="INVALID_SELECTION", stake=10.00)
+            api_client.post_place_bet(
+                match_id=matches[0].id, selection="INVALID_SELECTION", stake=10.00
+            )
 
         assert exc_info.value.status_code == 422
         assert exc_info.value.error.error == "invalid_selection"
@@ -104,7 +108,7 @@ class TestBettingApi:
         """Verify stake < 1.00 raises ApiValidationError with Error schema."""
         matches = api_client.get_matches()
         with pytest.raises(ApiValidationError) as exc_info:
-            api_client.place_bet(match_id=matches[0].id, selection="HOME", stake=0.50)
+            api_client.post_place_bet(match_id=matches[0].id, selection="HOME", stake=0.50)
 
         assert exc_info.value.status_code == 422
         assert exc_info.value.error.error == "invalid_stake_min"
@@ -116,7 +120,7 @@ class TestBettingApi:
         """Verify stake > 100.00 raises ApiValidationError with Error schema."""
         matches = api_client.get_matches()
         with pytest.raises(ApiValidationError) as exc_info:
-            api_client.place_bet(match_id=matches[0].id, selection="HOME", stake=150.00)
+            api_client.post_place_bet(match_id=matches[0].id, selection="HOME", stake=150.00)
 
         assert exc_info.value.status_code == 422
         assert exc_info.value.error.error == "invalid_stake_max"
@@ -128,7 +132,7 @@ class TestBettingApi:
         """Verify stake with >2 decimal places raises ApiValidationError with Error schema."""
         matches = api_client.get_matches()
         with pytest.raises(ApiValidationError) as exc_info:
-            api_client.place_bet(match_id=matches[0].id, selection="HOME", stake=10.555)
+            api_client.post_place_bet(match_id=matches[0].id, selection="HOME", stake=10.555)
 
         assert exc_info.value.status_code == 422
         assert exc_info.value.error.error == "invalid_stake_precision"
@@ -139,7 +143,7 @@ class TestBettingApi:
         """Verify omitting x-user-id header raises ApiAuthError with AuthError schema."""
         matches = api_client.get_matches()
         with pytest.raises(ApiAuthError) as exc_info:
-            api_client.place_bet(
+            api_client.post_place_bet(
                 match_id=matches[0].id,
                 selection="HOME",
                 stake=10.00,
@@ -156,7 +160,7 @@ class TestBettingApi:
         """Verify invalid x-user-id token raises ApiAuthError with AuthError schema."""
         matches = api_client.get_matches()
         with pytest.raises(ApiAuthError) as exc_info:
-            api_client.place_bet(
+            api_client.post_place_bet(
                 match_id=matches[0].id,
                 selection="HOME",
                 stake=10.00,
@@ -183,10 +187,10 @@ class TestBettingApi:
         """Verify POST /api/reset-balance restores balance and satisfies ResetBalanceResponse schema."""
         # Alter balance first
         matches = api_client.get_matches()
-        api_client.place_bet(match_id=matches[0].id, selection="HOME", stake=15.00)
+        api_client.post_place_bet(match_id=matches[0].id, selection="HOME", stake=15.00)
 
         # Trigger reset via typed SDK method
-        reset_model: ResetBalanceResponse = api_client.reset_balance()
+        reset_model: ResetBalanceResponse = api_client.post_reset_balance()
         assert reset_model.message == "Balance reset successfully"
         assert reset_model.balance == 125.5
         assert reset_model.currency == "EUR"

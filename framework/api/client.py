@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 import allure
 import requests
 
-from framework.api.exceptions import raise_api_error
+from framework.api.exceptions import validate_rest_error
 from framework.api.models import (
     Balance,
     Match,
@@ -97,6 +97,7 @@ class BaseClient:
             return endpoint
         return f"{self.base_url}/{endpoint.lstrip('/')}"
 
+    @validate_rest_error
     def get(
         self,
         endpoint: str,
@@ -107,10 +108,9 @@ class BaseClient:
         """Execute GET request with automated telemetry and optional header overrides."""
         url = self._build_url(endpoint)
         logger.info(f"GET {url}")
-        resp = self.session.get(url, params=params, headers=headers, **kwargs)
-        raise_api_error(resp)
-        return resp
+        return self.session.get(url, params=params, headers=headers, **kwargs)
 
+    @validate_rest_error
     def post(
         self,
         endpoint: str,
@@ -122,10 +122,9 @@ class BaseClient:
         """Execute POST request with automated telemetry and optional header overrides."""
         url = self._build_url(endpoint)
         logger.info(f"POST {url}")
-        resp = self.session.post(url, data=data, json=json, headers=headers, **kwargs)
-        raise_api_error(resp)
-        return resp
+        return self.session.post(url, data=data, json=json, headers=headers, **kwargs)
 
+    @validate_rest_error
     def put(
         self,
         endpoint: str,
@@ -137,10 +136,9 @@ class BaseClient:
         """Execute PUT request with automated telemetry and optional header overrides."""
         url = self._build_url(endpoint)
         logger.info(f"PUT {url}")
-        resp = self.session.put(url, data=data, json=json, headers=headers, **kwargs)
-        raise_api_error(resp)
-        return resp
+        return self.session.put(url, data=data, json=json, headers=headers, **kwargs)
 
+    @validate_rest_error
     def delete(
         self,
         endpoint: str,
@@ -150,9 +148,7 @@ class BaseClient:
         """Execute DELETE request with automated telemetry and optional header overrides."""
         url = self._build_url(endpoint)
         logger.info(f"DELETE {url}")
-        resp = self.session.delete(url, headers=headers, **kwargs)
-        raise_api_error(resp)
-        return resp
+        return self.session.delete(url, headers=headers, **kwargs)
 
 
 class BettingApiClient(BaseClient):
@@ -190,12 +186,8 @@ class BettingApiClient(BaseClient):
         resp = self.post("/api/place-bet", json=body, headers=headers)
         return PlaceBetResponse.model_validate(resp.json())
 
-    place_bet = post_place_bet
-
     def post_reset_balance(self, headers: Optional[Dict[str, Any]] = None) -> ResetBalanceResponse:
         """Reset balance and return validated ResetBalanceResponse."""
         logger.info(f"Resetting balance for user-id: {self.user_id}")
         resp = self.post("/api/reset-balance", headers=headers)
         return ResetBalanceResponse.model_validate(resp.json())
-
-    reset_balance = post_reset_balance
