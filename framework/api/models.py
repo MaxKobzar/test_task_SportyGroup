@@ -4,6 +4,7 @@ Directly aligns with the OpenAPI 3.0.3 specification from /api/docs.
 Enforces strict contract validation (extra="forbid") on all response models.
 """
 
+from datetime import date
 from enum import Enum
 from typing import Literal
 
@@ -11,7 +12,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class SelectionType(str, Enum):
-    """Supported bet selection types as defined in OpenAPI schema."""
+    """Supported bet selection types as defined in OpenAPI components/schemas/Match."""
 
     HOME = "HOME"
     DRAW = "DRAW"
@@ -23,9 +24,21 @@ class Odds(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    home: float
-    draw: float
-    away: float
+    home: float = Field(
+        ...,
+        gt=1.0,
+        description="Decimal odds for home team victory",
+    )
+    draw: float = Field(
+        ...,
+        gt=1.0,
+        description="Decimal odds for a draw outcome",
+    )
+    away: float = Field(
+        ...,
+        gt=1.0,
+        description="Decimal odds for away team victory",
+    )
 
 
 class Match(BaseModel):
@@ -33,12 +46,37 @@ class Match(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    id: str
-    competition: str = Field(alias="competition")
-    home_team: str = Field(alias="homeTeam")
-    away_team: str = Field(alias="awayTeam")
-    kickoff_date: str = Field(alias="kickoffDate")
-    odds: Odds
+    id: str = Field(
+        ...,
+        min_length=1,
+        description="Unique identifier for the match fixture",
+    )
+    competition: str = Field(
+        ...,
+        min_length=1,
+        description="Name of the league or competition",
+    )
+    home_team: str = Field(
+        ...,
+        alias="homeTeam",
+        min_length=1,
+        description="Name of the home team",
+    )
+    away_team: str = Field(
+        ...,
+        alias="awayTeam",
+        min_length=1,
+        description="Name of the away team",
+    )
+    kickoff_date: date = Field(
+        ...,
+        alias="kickoffDate",
+        description="Kickoff date in ISO format (YYYY-MM-DD)",
+    )
+    odds: Odds = Field(
+        ...,
+        description="Decimal odds offered for the three match outcomes (1X2)",
+    )
 
 
 class Balance(BaseModel):
@@ -46,8 +84,17 @@ class Balance(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    balance: float
-    currency: str = "EUR"
+    balance: float = Field(
+        ...,
+        ge=0.0,
+        description="Available user account balance",
+    )
+    currency: str = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        description="ISO 4217 three-letter currency code (e.g., EUR)",
+    )
 
 
 class PlaceBetRequest(BaseModel):
@@ -58,9 +105,22 @@ class PlaceBetRequest(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
-    match_id: str = Field(alias="matchId")
-    selection: SelectionType
-    stake: float = Field(ge=1.0, le=100.0)
+    match_id: str = Field(
+        ...,
+        alias="matchId",
+        min_length=1,
+        description="Target match fixture ID for the wager",
+    )
+    selection: SelectionType = Field(
+        ...,
+        description="Bet selection outcome (HOME, DRAW, AWAY)",
+    )
+    stake: float = Field(
+        ...,
+        ge=1.0,
+        le=100.0,
+        description="Wager amount between €1.00 and €100.00",
+    )
 
 
 class PlaceBetResponse(BaseModel):
@@ -71,19 +131,47 @@ class PlaceBetResponse(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    message: str
-    match_id: str = Field(alias="matchId")
-    selection: str
-    stake: float
-    odds: float
-    payout: float
-    balance: float = Field(validation_alias=AliasChoices("balance", "newBalance"))
-    currency: str = "EUR"
-
-    @property
-    def new_balance(self) -> float:
-        """Backward-compatible alias for balance / newBalance."""
-        return self.balance
+    message: str = Field(
+        ...,
+        description="Confirmation status message returned by the server",
+    )
+    match_id: str = Field(
+        ...,
+        alias="matchId",
+        description="Identifier of the match fixture wagered upon",
+    )
+    selection: str = Field(
+        ...,
+        description="Selected match outcome string",
+    )
+    stake: float = Field(
+        ...,
+        ge=1.0,
+        le=100.0,
+        description="Wager amount deducted for this bet",
+    )
+    odds: float = Field(
+        ...,
+        gt=1.0,
+        description="Decimal odds confirmed by the server for this wager",
+    )
+    payout: float = Field(
+        ...,
+        gt=0.0,
+        description="Calculated potential payout return (stake * odds)",
+    )
+    balance: float = Field(
+        ...,
+        validation_alias=AliasChoices("balance", "newBalance"),
+        ge=0.0,
+        description="User balance immediately following bet placement deduction",
+    )
+    currency: str = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        description="ISO 4217 three-letter currency code (e.g., EUR)",
+    )
 
 
 class ResetBalanceResponse(BaseModel):
@@ -91,9 +179,21 @@ class ResetBalanceResponse(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    message: str
-    balance: float
-    currency: str = "EUR"
+    message: str = Field(
+        ...,
+        description="Reset operation confirmation message",
+    )
+    balance: float = Field(
+        ...,
+        ge=0.0,
+        description="Restored user balance value",
+    )
+    currency: str = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        description="ISO 4217 three-letter currency code (e.g., EUR)",
+    )
 
 
 class Error(BaseModel):
@@ -101,8 +201,16 @@ class Error(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    error: str
-    message: str
+    error: str = Field(
+        ...,
+        min_length=1,
+        description="Machine-readable error classification code",
+    )
+    message: str = Field(
+        ...,
+        min_length=1,
+        description="Human-readable explanation of the error",
+    )
 
 
 class AuthError(BaseModel):
@@ -110,7 +218,10 @@ class AuthError(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    error: Literal["missing_user_id", "invalid_user_id"]
+    error: Literal["missing_user_id", "invalid_user_id"] = Field(
+        ...,
+        description="Enumerated authentication error code as defined in OpenAPI",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -123,8 +234,14 @@ class Error400(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    error: Literal["invalid_request"] = "invalid_request"
-    message: Literal["Request body must be a JSON object."] = "Request body must be a JSON object."
+    error: Literal["invalid_request"] = Field(
+        default="invalid_request",
+        description="Exact error code for invalid request body",
+    )
+    message: Literal["Request body must be a JSON object."] = Field(
+        default="Request body must be a JSON object.",
+        description="Exact error message for non-object JSON body",
+    )
 
 
 class Error401(BaseModel):
@@ -132,7 +249,10 @@ class Error401(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    error: Literal["missing_user_id"] = "missing_user_id"
+    error: Literal["missing_user_id"] = Field(
+        default="missing_user_id",
+        description="Exact error code for missing user id header",
+    )
 
 
 class Error405(BaseModel):
@@ -140,8 +260,14 @@ class Error405(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    error: Literal["insufficient_balance"] = "insufficient_balance"
-    message: Literal["Insufficient balance"] = "Insufficient balance"
+    error: Literal["insufficient_balance"] = Field(
+        default="insufficient_balance",
+        description="Default error code returned in OpenAPI 405 example",
+    )
+    message: Literal["Insufficient balance"] = Field(
+        default="Insufficient balance",
+        description="Default error message returned in OpenAPI 405 example",
+    )
 
 
 class Error409(BaseModel):
@@ -149,8 +275,14 @@ class Error409(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    error: Literal["insufficient_balance"] = "insufficient_balance"
-    message: Literal["Insufficient balance"] = "Insufficient balance"
+    error: Literal["insufficient_balance"] = Field(
+        default="insufficient_balance",
+        description="Default error code returned in OpenAPI 409 example",
+    )
+    message: Literal["Insufficient balance"] = Field(
+        default="Insufficient balance",
+        description="Default error message returned in OpenAPI 409 example",
+    )
 
 
 class Error422(BaseModel):
@@ -158,8 +290,14 @@ class Error422(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    error: Literal["invalid_match_id"] = "invalid_match_id"
-    message: Literal["Match id is invalid."] = "Match id is invalid."
+    error: Literal["invalid_match_id"] = Field(
+        default="invalid_match_id",
+        description="Exact error code for invalid match ID",
+    )
+    message: Literal["Match id is invalid."] = Field(
+        default="Match id is invalid.",
+        description="Exact error message for invalid match ID",
+    )
 
 
 class Error500(BaseModel):
@@ -167,5 +305,11 @@ class Error500(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    error: Literal["insufficient_balance"] = "insufficient_balance"
-    message: Literal["Insufficient balance"] = "Insufficient balance"
+    error: Literal["insufficient_balance"] = Field(
+        default="insufficient_balance",
+        description="Default error code returned in OpenAPI 500 example",
+    )
+    message: Literal["Insufficient balance"] = Field(
+        default="Insufficient balance",
+        description="Default error message returned in OpenAPI 500 example",
+    )
