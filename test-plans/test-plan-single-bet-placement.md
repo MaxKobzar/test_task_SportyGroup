@@ -1,249 +1,318 @@
 # Test Plan: Single Bet Placement
 
-**Application Under Test (AUT):** [Sports Betting QA Application](https://qae-assignment-tau.vercel.app/?user-id=candidate-Mc2IYbjdqhj8)
-**Specification Source:** [Feature_Specification.pdf](file:///Users/maksym_kobzar/PET/sporty_group/materials/Feature_Specification.pdf)
-**Methodology:** Risk-Based Testing (RBT) & Strategic Clean Engineering
-**Automation/Interaction Protocol:** Selenium MCP Server (`selenium-mcp-server` over stdio JSON-RPC) / Playwright
+- **Application Under Test (AUT):** [Sports Betting QA Application](https://qae-assignment-tau.vercel.app/?user-id=candidate-Mc2IYbjdqhj8)
+- **Specification Source:** [Feature_Specification.pdf](../materials/Feature_Specification.pdf)
+- **Defect Register:** [BUG_REPORTS.md](../bugs/BUG_REPORTS.md)
+- **Methodology:** Risk-Based Testing (RBT)
+- **Automation Stack:** Python / pytest / Selenium WebDriver (UI) + HTTP client (API), Screenplay pattern
+- **Reconnaissance Tooling:** Selenium MCP Server (`selenium-mcp-server` over stdio JSON-RPC)
 
 ---
 
 ## 1. Executive Summary & Strategy
 
-Rather than pursuing redundant, exhaustive permutations across all 103 football matches and odds variations, this test plan employs **Risk-Based Testing (RBT)**. We concentrate validation on catastrophic failure modes:
-1. **Financial Solvency & Ledger Integrity**: Ensuring balance can never go negative and that double-spending or concurrency race conditions are thwarted.
-2. **Regulatory & Calculation Correctness**: Ensuring payout calculations strictly adhere to agreed odds without rounding or calculation bugs, and receipts accurately represent the contractual agreement.
-3. **Temporal Match Integrity**: Preventing "past-posting" (wagering on already completed or started events).
-4. **Input Boundaries & Data Validation**: Enforcing minimum/maximum stake limits and decimal formatting at both client and server layers.
+Rather than pursuing exhaustive permutations across all 103 football matches and odds variations, this plan applies **Risk-Based Testing (RBT)** and concentrates on catastrophic failure modes:
+
+1. **Financial Solvency & Ledger Integrity** — balance can never go negative; concurrent requests can never debit more than the bets actually accepted.
+2. **Contractual / Calculation Correctness** — payout equals `stake × odds` rounded to 2 decimals; the receipt faithfully represents the placed bet.
+3. **Temporal Match Integrity** — no wagers on events that are no longer upcoming ("past-posting").
+4. **Input & Request Validation** — stake, selection, match ID, payload and user-context rules enforced at **both** UI and API layers.
+
+### Test Data Strategy (Time-Independent)
+
+The match catalog is static while the calendar is not: an "upcoming" match today becomes `TODAY` and then `PAST`. Scenarios therefore **never hardcode a match ID** for positive flows. Matches are resolved at runtime from `GET /api/matches`:
+
+| Data role | Resolution rule | Implementation |
+| :--- | :--- | :--- |
+| `target_match` (upcoming) | First match with `kickoffDate > today` (strictly after; `TODAY` excluded due to ambiguity — see Open Questions) | `target_match` fixture (suite-level `conftest.py`) |
+| `past_match` | Any match with `kickoffDate < today` | Resolved from `/api/matches` |
+| Initial balance | Taken from the `POST /api/reset-balance` response body, not hardcoded (observed value at time of writing: €125.50) | `reset_balance_precondition` fixture |
+
+Concrete values quoted in scenarios (team names, odds) are **illustrative examples** observed on 2026-11-16; assertions are computed from the resolved match's actual odds.
 
 ### Scope Boundaries & Deferred Features (Phase 2)
-To maximize testing depth on core financial and regulatory transaction paths, the following items from [Feature_Specification.pdf](file:///Users/maksym_kobzar/PET/sporty_group/materials/Feature_Specification.pdf) are intentionally classified as secondary and deferred to Phase 2:
-* **Match Catalog Filters (Spec Section 2.6)**: Date filter (single day / date range) and Odds range filter (min/max range validation) are non-transactional navigation aids and will be validated in a dedicated discovery test suite.
-* **Bet Slip Batch Clearing (Spec Section 2.2)**: `Remove All` and per-selection delete `( x )` buttons are low-risk UI convenience features covered under general slip component unit/regression tests.
+* **Match Catalog Filters (Spec §2.6)** — date and odds-range filters are non-transactional navigation aids; deferred to a dedicated discovery suite.
+* **Bet Slip Batch Clearing (Spec §2.2)** — `Remove All` and per-selection `( x )` are low-risk UI conveniences; covered by slip component regression tests.
 
-### Specification Inconsistency Note (Minimum Stake)
-In [Feature_Specification.pdf](file:///Users/maksym_kobzar/PET/sporty_group/materials/Feature_Specification.pdf), Table 4.1 specifies `"Minimum €1.01 (positive values)"`, whereas Section 3 specifies `"Stake min (per bet) €1.00"` and Section 4.4 specifies user-facing error copy `"Minimum stake is €1.00"`. In this test plan, **`€1.00` is adopted as the authoritative minimum stake boundary** to align with business logic and UI copy specifications.
+### Specification Inconsistency (Minimum Stake)
+Spec Table 4.1 states `Minimum €1.01 (positive values)`, while §3 states `Stake min (per bet) €1.00` and §4.4 specifies copy `Minimum stake is €1.00`. **€1.00 is adopted as the working minimum** (two of three sources agree, including user-facing copy). TC-BET-003 tests **0.99, 1.00 and 1.01** so the outcome is informative under either reading. If `1.00` is rejected, it is logged as a **spec conflict for Product Owner resolution**, not as a product defect.
 
-### Key Empirical Findings Discovered via Automated Reconnaissance
-During automated reconnaissance using the Selenium MCP Server against the live application, the following high-risk discrepancies were identified and factored into this plan:
-* **Critical Financial Flaw (API Layer)**: While the UI disables the `Place Bet` button when the stake exceeds the balance, direct execution against `POST /api/place-bet` accepts stakes larger than available balance, creating an illegal **negative user balance** (e.g., balance `-30.00`).
-* **Critical Calculation Defect (UI Receipt)**: In the success receipt modal, potential payout is hardcoded to `stake * 2` in the client script (`R * 2`), ignoring the actual match odds (e.g., stake €5.00 on odds 1.85 yields €10.00 instead of €9.25).
-* **Display Defect (Team Inversion)**: The receipt displays team labels inverted as `${awayTeam} vs ${homeTeam}` (e.g., "PSG vs Marseille" instead of "Marseille vs PSG").
-* **Temporal Exploit**: The UI and API accept wagers on matches explicitly marked as `PAST` (events from early 2026), violating the pre-match betting domain requirement.
+### Open Questions for Product Owner
+1. **Minimum stake:** €1.00 or €1.01? (see above)
+2. **Same-day matches:** `kickoffDate` is date-only (`YYYY-MM-DD`) with no kickoff time. Is a match labeled `TODAY` still bettable (pre-match) or should it be treated as started?
+3. **Past matches in catalog:** §2.1 says the list displays *upcoming* matches. Should `PAST` matches be hidden entirely, or displayed but non-selectable?
+
+### Key Empirical Findings (Automated Reconnaissance)
+Discrepancies identified against the live application and factored into this plan (full details in [BUG_REPORTS.md](../bugs/BUG_REPORTS.md)):
+
+| Bug ID | Finding | Severity | Covered by |
+| :--- | :--- | :--- | :--- |
+| BUG-001 | `POST /api/place-bet` accepts stake > balance → negative balance (e.g. `-30.00`) | Critical | TC-BET-002 |
+| BUG-002 | Receipt payout hardcoded to `stake * 2` (€5.00 @ 1.85 shows €10.00, not €9.25) | Critical | TC-BET-001 |
+| BUG-003 | UI and API accept wagers on `PAST` matches | Critical | TC-BET-004 |
+| BUG-004 | Receipt shows `Away vs Home` (e.g. "PSG vs Marseille") | Medium | TC-BET-001 |
+| BUG-005 | `POST /api/place-bet` returns `currency: "USD"` instead of `"EUR"` | Medium | TC-BET-001 |
+| BUG-006 | Backend payout float error (`100 × 4.10` → `409.99`) | Low | TC-BET-003 |
+
+> Note: BUG-003 severity is aligned to **Critical** to match RSK-03 (past-posting yields guaranteed player wins). `BUG_REPORTS.md` should be updated accordingly.
 
 ---
 
 ## 2. Risk Assessment Matrix
 
-| Risk ID | Risk Category | Failure Mode / Threat | Impact | Likelihood | Risk Level | Selected Scenario |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **RSK-01** | **Financial Integrity** | Uncollateralized betting / negative balance via API bypass or client desync. | Catastrophic (Direct capital loss) | High | **CRITICAL** | `TC-BET-002` |
-| **RSK-02** | **Contractual / Payout** | Incorrect payout calculation on receipt or inverted match participants. | High (Regulatory fines & disputes) | High (Observed bug) | **CRITICAL** | `TC-BET-001` |
-| **RSK-03** | **Temporal Integrity** | Wagering on past or in-progress matches (past-posting arbitrage exploit). | Critical (Guaranteed player winnings) | High (Observed bug) | **CRITICAL** | `TC-BET-004` |
-| **RSK-04** | **Concurrency** | Rapid double-click on `Place Bet` causing duplicate debits / race conditions. | High (Customer panic & reconciliation failure) | Medium | **HIGH** | `TC-BET-005` |
-| **RSK-05** | **Boundary Enforcement** | Fractional penny truncation or sub-minimum / super-maximum stake acceptance. | Medium (Ledger rounding errors, compliance) | Medium | **HIGH** | `TC-BET-003` |
-| **RSK-06** | **Fault Tolerance** | System hangs in loading state or drops bet on transient 500 error; broken Rebet. | Medium (UX drop-off & customer friction) | Medium | **MEDIUM** | `TC-BET-006` |
+Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P × I**. Score 9 = Critical (P0), 6 = High (P1), 3–4 = Medium (P2), 1–2 = Low (P3). Probability is 3 where a defect has already been observed.
+
+| Risk ID | Category | Failure Mode / Threat | P | I | Score | Level | Scenario |
+| :--- | :--- | :--- | :-: | :-: | :-: | :--- | :--- |
+| **RSK-01** | Financial Integrity | Uncollateralized betting / negative balance via API bypass | 3 (BUG-001) | 3 | **9** | **CRITICAL** | `TC-BET-002` |
+| **RSK-02** | Contractual / Payout | Wrong payout, selection, or participants on receipt / API response | 3 (BUG-002/004/005) | 3 | **9** | **CRITICAL** | `TC-BET-001` |
+| **RSK-03** | Temporal Integrity | Wagering on past or started matches (past-posting) | 3 (BUG-003) | 3 | **9** | **CRITICAL** | `TC-BET-004` |
+| **RSK-04** | Concurrency | Double-click / parallel requests debit more than accepted bets | 2 | 3 | **6** | **HIGH** | `TC-BET-005` |
+| **RSK-05** | Input & Request Validation | Out-of-range / malformed stake, invalid selection or match, missing auth accepted | 2 | 3 | **6** | **HIGH** | `TC-BET-003` |
+| **RSK-06** | Fault Tolerance | UI hangs in `Placing...`, deducts on failure, or broken Rebet/Close | 2 | 2 | **4** | **MEDIUM** | `TC-BET-006` |
 
 ---
 
 ## 3. Prioritized Test Scenarios
 
-### Scenario 1: Core Single Bet Placement & Contractual Receipt Verification (Critical User Journey)
+### Scenario 1: Core Single Bet Placement & Receipt Verification (Critical User Journey)
 * **ID:** `TC-BET-001`
-* **Title:** Successful Single Bet Placement on an Upcoming Match with Balance Deduction & Receipt Verification
+* **Title:** Successful Single Bet on an Upcoming Match with Balance Deduction, Receipt and API Contract Verification
 * **Priority:** Critical
-* **Scope / Designation:** Primary End-to-End Critical User Journey (Automated in `tests/ui/test_critical_user_journey_e2e.py`)
-* **Risk Rationale:** Core happy path. This is the primary revenue transaction of the product. If odds, stake, deducted balance, and potential payout fail to align accurately on both the client slip and the resulting legal receipt, the product faces immediate player disputes and regulatory compliance penalties.
+* **Scope / Designation:** Primary E2E critical user journey (automated in `tests/ui/test_critical_user_journey_e2e.py`)
+* **Risk Rationale:** The primary revenue transaction. If odds, stake, deducted balance and payout do not align across the bet slip, the receipt (the customer's contractual record) and the ledger, the operator faces disputes and regulatory penalties. Receipt defects BUG-002 and BUG-004 have already been observed, so this is also regression-critical.
 * **Preconditions:**
-  * User balance is known (e.g., reset to initial €125.50 via `POST /api/reset-balance`).
-  * At least one valid upcoming match exists in the catalog (e.g., `Marseille vs PSG`, Kickoff date: 2026-11-17, Odds: 1=4.10, X=3.70, 2=1.85).
+  * Balance reset via `POST /api/reset-balance`; `initial_balance` captured from the response body (observed: €125.50).
+  * `target_match` resolved from `GET /api/matches` as the first match with `kickoffDate > today`. Example: `Marseille vs PSG`, odds 1=4.10, X=3.70, 2=1.85.
 * **Steps:**
-  1. Open application at `https://qae-assignment-tau.vercel.app/?user-id=candidate-Mc2IYbjdqhj8`.
-  2. Verify initial header balance displays `€125.50`.
-  3. Scroll to upcoming match `Marseille vs PSG` and click odds button `2` (Away, odds 1.85).
-  4. Verify the Bet Slip populates with:
-     * Match title: `Marseille vs PSG`
+  1. Open the application at `https://qae-assignment-tau.vercel.app/?user-id=candidate-Mc2IYbjdqhj8`.
+  2. Verify the header balance displays `initial_balance` (e.g. `€125.50`).
+  3. On the `target_match` card, click odds button `1` (Home).
+  4. Verify the Bet Slip shows `Match Winner: Home` with the Home odds.
+  5. On the same card, click odds button `2` (Away).
+  6. Verify the Bet Slip **replaces** the selection (Spec §2.1/§2.2), and shows exactly one selection:
+     * Match title: `<homeTeam> vs <awayTeam>` (e.g. `Marseille vs PSG`)
      * Selection: `Match Winner: Away`
-     * Odds: `1.85`
-     * `Total Stake`: `€0.00`
-     * `Potential Payout`: `€0.00`
-     * `Place Bet` button is disabled.
-  5. In input `#bet-slip-stake-input`, enter `10.00`.
-  6. Verify the slip dynamically calculates:
+     * Odds: `<odds.away>` (e.g. `1.85`)
+     * Available balance: `initial_balance` (Spec §2.2)
+     * `Total Stake`: `€0.00`, `Potential Payout`: `€0.00`
+     * `Place Bet` is disabled.
+  7. Enter `10.00` in `#bet-slip-stake-input`.
+  8. Verify the slip recalculates:
      * `Total Stake`: `€10.00`
-     * `Potential Payout`: `€18.50` (`10.00 * 1.85`)
-     * `Place Bet` button becomes enabled.
-  7. Click `Place Bet` (`#bet-slip-place-bet`).
-  8. Verify the button immediately enters loading state (`Placing...`) and is disabled.
-  9. Wait for the transaction to resolve and the Success Receipt Modal to appear.
-  10. Validate the receipt modal fields:
-      * Bet ID: Present in format `#B-XXXXX`
-      * Match: Must preserve `Home vs Away` ordering (`Marseille vs PSG`)
-      * Stake: `€10.00`
-      * Odds: `1.85`
-      * Potential Payout: Mathematically exact `€18.50` (verifying against hardcoded multipliers)
-      * Timestamp: Valid current placement time label
-  11. Click the `Close` button on the modal.
-  12. Verify the modal closes, the active selection is cleared from the Bet Slip, and the header balance is updated to `€115.50`.
+     * `Potential Payout`: `round(10.00 × odds.away, 2)` (e.g. `€18.50`)
+     * `Place Bet` is enabled.
+  9. Click `Place Bet` (`#bet-slip-place-bet`).
+  10. Verify the button immediately shows `Placing...` and its `disabled` property is `true`.
+  11. Wait for the Success Receipt Modal.
+  12. Validate every receipt field required by Spec §2.4:
+      * **Bet ID:** present and non-empty (observed format `#B-XXXXX`; the format is informational, not a spec requirement)
+      * **Match:** `Home vs Away` order (e.g. `Marseille vs PSG`) — regression for BUG-004
+      * **Selection:** `Away` / `Match Winner: Away`
+      * **Stake:** `€10.00`
+      * **Odds at placement:** equal to the slip odds (odds are static for the session, Spec §3)
+      * **Potential payout:** `round(10.00 × odds.away, 2)` (e.g. `€18.50`) — regression for BUG-002
+      * **Placement timestamp:** present and within the current minute
+  13. Click `Close` on the modal.
+  14. Verify the modal closes, the Bet Slip has no active selection, and the header balance shows `initial_balance − 10.00` (e.g. `€115.50`).
+  15. **Ledger parity:** call `GET /api/balance`; verify `balance == initial_balance − 10.00` and `currency == "EUR"`.
+  16. **API contract parity** (direct `POST /api/place-bet` on `target_match`, `selection: "AWAY"`, `stake: 10.00`): verify the 200 response has `selection == "AWAY"`, `stake == 10`, `odds == odds.away`, `payout == round(10 × odds.away, 2)`, `balance == previous balance − 10`, and `currency == "EUR"` — regression for BUG-005.
 * **Expected Result:**
-  * Bet transitions through `Placing...` to successful placement.
-  * Available balance is debited by exactly €10.00.
-  * Success receipt matches all placement parameters and displays exact payout calculation `€18.50`.
-  * Bet slip resets cleanly without lingering selections.
+  * The selection is replaced, not added; the slip holds exactly one selection.
+  * The bet moves from `Placing...` to a single success outcome.
+  * The balance is debited by exactly €10.00 in both the UI and `GET /api/balance`.
+  * The receipt shows all 7 fields from Spec §2.4 with the correct values: `Home vs Away` order and payout = `stake × odds`.
+  * The API response matches the spec contract, including `currency: "EUR"`.
+  * After the receipt is closed, the user returns to the main flow with no active selection.
 
 ---
 
 ### Scenario 2: Overdraft Prevention & Multi-Layer Balance Enforcement
 * **ID:** `TC-BET-002`
-* **Title:** Prevent Wager Placement When Stake Exceeds Available Account Balance (Client & Server Parity)
+* **Title:** Reject Stakes Exceeding Available Balance at UI and API Layers (Including Exact-Balance Boundary)
 * **Priority:** Critical
-* **Risk Rationale:** Protects the platform from financial insolvency. If client-side checks can be bypassed or if the backend API fails to reject an overdraft, a bettor can wager uncollateralized funds, creating negative balances and irrecoverable operator debt.
-* **Preconditions:**
-  * User balance is set to a known amount (e.g., reduced to €25.50 by prior wagers or test setup).
+* **Risk Rationale:** Protects the platform from insolvency. If the backend relies on the client to block overdrafts, a user can wager funds they do not have, creating negative balances and unrecoverable debt. This has already been observed (BUG-001). The exact-balance boundary catches off-by-one comparisons (`<` vs `<=`).
+* **Preconditions (deterministic setup — no set-balance endpoint exists):**
+  1. `POST /api/reset-balance` → capture `initial_balance` (observed €125.50).
+  2. `POST /api/place-bet` on `target_match` (`kickoffDate > today`) with `stake: 100.00` → expected balance `initial_balance − 100.00` (observed **€25.50**). Call this `B`.
+  3. All steps below use `target_match`. **Do not use a past or same-day match:** a `422` must come only from the balance rule, not from the event-status rule.
 * **Steps:**
-  1. Navigate to the application with current balance of `€25.50`.
-  2. Select an outcome on any upcoming match (e.g., `Bayern Munich vs Leverkusen`).
-  3. In `#bet-slip-stake-input`, enter a stake amount strictly greater than the balance but within maximum stake limit (e.g., `50.00`).
-  4. Observe the Bet Slip validation state.
-  5. Verify the inline error message displays: `Insufficient balance`.
-  6. Verify the `Place Bet` button is disabled (`disabled="true"`).
-  7. **API Defense-in-Depth Verification**: Execute an HTTP `POST` directly to `/api/place-bet` with headers `x-user-id: candidate-Mc2IYbjdqhj8` and payload:
+  1. Open the application; verify the header and slip show balance `B` (e.g. `€25.50`).
+  2. Select an outcome on `target_match`.
+  3. **Over-balance (UI):** enter a stake greater than `B` but within the maximum, e.g. `50.00`.
+     * Verify the inline error `Insufficient balance` appears.
+     * Verify the `Place Bet` `disabled` property is `true`.
+  4. **Balance + €0.01 (UI):** enter `B + 0.01` (e.g. `25.51`); verify the same error and disabled state.
+  5. **API over-balance:** `POST /api/place-bet` with header `x-user-id: candidate-Mc2IYbjdqhj8` and body:
      ```json
-     {
-       "matchId": "bundesliga-bayern-leverkusen-2026-11-13",
-       "selection": "HOME",
-       "stake": 50.00
-     }
+     { "matchId": "<target_match.id>", "selection": "HOME", "stake": 50.00 }
      ```
-  8. Inspect the HTTP status code and response body.
-  9. Query `GET /api/balance` to verify current balance.
+     Capture the status code and response body.
+  6. **API balance + €0.01:** repeat step 5 with `stake: B + 0.01`.
+  7. `GET /api/balance` → verify the balance is still exactly `B`.
+  8. **Exact-balance boundary (positive):** in the UI, enter a stake equal to `B` (e.g. `25.50`); verify there is no error and `Place Bet` is enabled. Place the bet.
+  9. Verify the success receipt appears and `GET /api/balance` returns `0.00` (never negative).
 * **Expected Result:**
-  * **UI**: Shows error `Insufficient balance` and locks the `Place Bet` button.
-  * **API**: Strictly rejects the request with HTTP `422 Unprocessable Entity` (error: `insufficient_balance`).
-  * **Ledger**: User balance remains strictly unchanged at `€25.50`; negative balance (e.g., `-24.50`) is strictly prevented.
+  * **UI:** stakes `> B` show `Insufficient balance` and lock `Place Bet`. A stake of exactly `B` is accepted.
+  * **API:** stakes `> B` are rejected with HTTP `422` (semantic validation failure, Spec §5.3). The error body is checked only against the schema in `/api/docs?format=json`; the spec defines no specific error code string.
+  * **Ledger:** the balance stays at `B` after rejected attempts and goes to exactly `0.00` after the exact-balance bet. It is never negative.
 
 ---
 
-### Scenario 3: Stake Boundary Value Analysis & Decimal Precision Validation
+### Scenario 3: Stake & Request Validation Matrix (Boundaries, Format, Protocol)
 * **ID:** `TC-BET-003`
-* **Title:** Boundary Condition Validation for Minimum (€1.00), Maximum (€100.00), and Decimal Formats
+* **Title:** Boundary Value Analysis and Validation of Stake, Selection, Match ID, Payload and User Context at UI and API Layers
 * **Priority:** High
-* **Risk Rationale:** Boundary values frequently reveal off-by-one errors in validation logic. Sub-minimum stakes allow micro-transaction spamming, exceeding maximum stakes bypasses responsible gaming limits, and accepting fractional cents (>2 decimals) causes rounding discrepancies in multi-currency betting books.
+* **Risk Rationale:** Validation edges are where off-by-one and type-coercion bugs live. Sub-minimum stakes enable micro-transaction abuse. Over-maximum stakes bypass exposure limits. Sub-cent precision causes ledger rounding drift (see BUG-006). If the API checks less than the UI, every UI rule can be bypassed with a direct request. Missing user context is an authorization weakness. One data-driven matrix covers Spec §4.1–§4.4 cheaply at the API level, while the UI rows cover the copy users see.
 * **Preconditions:**
-  * Available balance is at least €100.00 (e.g., reset to €125.50).
-  * An active match selection is present in the Bet Slip.
+  * Balance reset (≥ €100.00 available).
+  * `target_match` resolved (`kickoffDate > today`). For row S7, prefer a match whose odds have a float representation issue (e.g. `4.10`).
 * **Steps:**
-  1. Add an upcoming match selection to the Bet Slip.
-  2. **Test Sub-Minimum Boundary (€0.99):**
-     * Enter `0.99` in `#bet-slip-stake-input`.
-     * Verify error message `Minimum stake is €1.00` appears.
-     * Verify `Place Bet` button is disabled.
-  3. **Test Minimum Valid Boundary (€1.00):**
-     * Clear and enter `1.00`.
-     * Verify error message clears and `Place Bet` button is enabled.
-  4. **Test Maximum Valid Boundary (€100.00):**
-     * Clear and enter `100.00`.
-     * Verify `Place Bet` button remains enabled and potential payout reflects €100.00 * odds.
-  5. **Test Super-Maximum Boundary (€100.01):**
-     * Clear and enter `100.01`.
-     * Verify error message `Maximum stake is €100.00` appears.
-     * Verify `Place Bet` button is disabled.
-  6. **Test Sub-Cent Precision Boundary (3+ Decimal Places):**
-     * Attempt to type `10.555`.
-     * Verify the input mask/validator rejects the third decimal place, maintaining `10.55`.
-     * Attempt to send `{"stake": 10.555}` directly via `POST /api/place-bet`.
+  1. Add a `target_match` selection to the Bet Slip.
+  2. For each **UI stake row** below, clear `#bet-slip-stake-input`, type the input, and record: the displayed value, the inline message, and the `Place Bet` `disabled` property.
+  3. For each **API row** below, send `POST /api/place-bet` (with a valid `x-user-id` unless stated otherwise) and record the status code and body.
+  4. After all rows, `GET /api/balance` → verify it changed only by the stakes of rows expected to succeed.
+
+  **A. Stake rows (UI + API — Spec §3, §4.1, §4.4)**
+
+  | Row | Stake input | Expected UI | Expected API |
+  | :--- | :--- | :--- | :--- |
+  | S1 | *(empty)* / omitted field | `Place Bet` disabled | `422` (or `400` if the schema treats it as malformed) |
+  | S2 | `abc` / `"10"` (string in JSON) | Input rejected / not accepted; `Place Bet` disabled | `422` / `400` |
+  | S3 | `0` and `-5` | Minimum message; disabled | `422` |
+  | S4 | `0.99` | `Minimum stake is €1.00`; disabled | `422` |
+  | S5 | `1.00` | No error; enabled (**if rejected → raise spec conflict, see §1**) | `200` |
+  | S6 | `1.01` | No error; enabled | `200` |
+  | S7 | `100.00` | No error; enabled; payout = `round(100.00 × odds, 2)` (e.g. odds 4.10 → `€410.00`) | `200`; `payout == 410.00` exactly — regression for BUG-006 |
+  | S8 | `100.01` | `Maximum stake is €100.00`; disabled | `422` |
+  | S9 | `10.555` | Third decimal blocked by the input **or** placement blocked with a precision message. Either is acceptable per Spec §4.1/§4.4. The value is never silently rounded and submitted. | `422` |
+  | S10 | `1,5` / `1.2.3` (single decimal separator rule) | Rejected; `Place Bet` disabled | n/a (UI format rule) |
+
+  **B. Request / protocol rows (API only — Spec §4.2, §4.3, §5.1)**
+
+  | Row | Request variation | Expected API |
+  | :--- | :--- | :--- |
+  | R1 | `selection: "WIN"` (not in `HOME`/`DRAW`/`AWAY`) | `422` |
+  | R2 | `selection` omitted | `422` (or `400`) |
+  | R3 | `matchId: ""` / `"   "` / omitted | `422` |
+  | R4 | `matchId: "unknown-match-id"` | `422` |
+  | R5 | Body `{not json` / body `[1,2]` (non-object) | `400` |
+  | R6 | Header `x-user-id` missing / empty | `401` |
+  | R7 | `GET` / `PUT` on `/api/place-bet` | `405` |
+  | R8 | Valid body plus an extra field `"foo": "bar"` | `200` (extra fields ignored, Spec §5.3) |
+
 * **Expected Result:**
-  * Only values in the closed interval `[1.00, 100.00]` with at most 2 decimal places are accepted.
-  * Exact error messages match specifications: `Minimum stake is €1.00` and `Maximum stake is €100.00`.
-  * Sub-cent precision payloads return HTTP `422` with `invalid_stake_precision`.
+  * Only stakes in the closed interval `[1.00, 100.00]` with at most 2 decimal places are accepted, at **both** layers.
+  * UI copy matches Spec §4.4 exactly: `Minimum stake is €1.00`, `Maximum stake is €100.00`.
+  * Payout at the maximum stake is exact to the cent (no float truncation).
+  * Every invalid request is rejected with the status class defined in Spec §5.3 (`400`/`401`/`405`/`422`). Error bodies are checked only against the published OpenAPI schema.
+  * No rejected row changes the balance.
 
 ---
 
 ### Scenario 4: Temporal Event Integrity (Rejection of Wagers on Past Matches)
 * **ID:** `TC-BET-004`
-* **Title:** Pre-Match Event Integrity: Enforce Rejection of Wagers on Finished or Past Events
+* **Title:** Pre-Match Integrity: No Wagers Accepted on Past Events at UI or API Layer
 * **Priority:** Critical
-* **Risk Rationale:** In pre-match sports betting, accepting wagers on past or started matches allows players to bet on known outcomes ("past-posting"), guaranteeing 100% win rate for the bettor and catastrophic financial drain for the sportsbook.
+* **Risk Rationale:** The product is pre-match only (Spec §1, §3). Accepting bets on finished events lets players bet on known outcomes ("past-posting"): a guaranteed win for the player and a direct loss for the operator. This has already been observed (BUG-003).
 * **Preconditions:**
-  * The match catalog returns matches with kickoff dates prior to current date/time (labeled `PAST` in the feed, e.g., `Manchester Utd vs Chelsea`, Kickoff: 2026-02-27).
+  * `past_match` resolved from `GET /api/matches` as any match with `kickoffDate < today` (example: `premier-league-manutd-chelsea`, `Manchester Utd vs Chelsea`, kickoff 2026-02-27).
+  * Balance reset; `balance_before` captured.
 * **Steps:**
   1. Open the application and view the match catalog.
-  2. Locate a match card with the `PAST` status badge.
-  3. Inspect the three odds buttons (`1`, `X`, `2`) on the card.
-  4. Attempt to click an odds button on the `PAST` match.
-  5. If the selection is added to the Bet Slip, input a valid stake (`10.00`) and click `Place Bet`.
-  6. In parallel, submit a direct API request to `POST /api/place-bet` targeting the past match ID:
+  2. Check whether `past_match` is displayed. Spec §2.1 says the list shows *upcoming* matches.
+  3. If it is displayed (labeled `PAST`), inspect its `1` / `X` / `2` odds buttons.
+  4. Try clicking an odds button on the `PAST` card.
+  5. If a selection is added, enter stake `10.00` and click `Place Bet`.
+  6. Independently, send `POST /api/place-bet`:
      ```json
-     {
-       "matchId": "premier-league-manutd-chelsea",
-       "selection": "HOME",
-       "stake": 10.00
-     }
+     { "matchId": "<past_match.id>", "selection": "HOME", "stake": 10.00 }
      ```
-  7. Verify application response and balance behavior.
+  7. `GET /api/balance` → compare with `balance_before`.
 * **Expected Result:**
-  * Odds buttons for `PAST` matches must be disabled/non-interactive in the UI.
-  * If a past match ID reaches `/api/place-bet`, the API must reject the placement with HTTP `422 Unprocessable Entity` (error: `event_already_started` or `invalid_event_status`).
-  * No stake is deducted and no bet receipt is issued for past events.
+  * **UI:** `past_match` is either not shown or shown with odds buttons that do not work (`disabled` property `true`, or clicks are ignored); no selection reaches the Bet Slip. (Which of the two is correct is open question #3 in §1.)
+  * **API:** the request is rejected with HTTP `422` (semantic match validation, Spec §5.3).
+  * **Ledger:** the balance equals `balance_before`; no receipt is issued.
+  * *Out of scope pending PO answer:* matches labeled `TODAY` (date-only kickoff, see §1 open question #2).
 
 ---
 
-### Scenario 5: Concurrency, Idempotency & In-Progress State Lock
+### Scenario 5: Concurrency & In-Progress State Lock
 * **ID:** `TC-BET-005`
-* **Title:** Prevent Duplicate Bet Placement via Rapid Multi-Click and Concurrent In-Flight Requests
+* **Title:** No Duplicate Debits from Rapid Multi-Click or Concurrent In-Flight Requests
 * **Priority:** High
-* **Risk Rationale:** Network latency often tempts users to click `Place Bet` multiple times. Without atomic locking or idempotency keys, duplicate wagers are created, deducting multiple stakes for a single user action and corrupting session state.
+* **Risk Rationale:** Slow networks make users click `Place Bet` repeatedly. Without a UI lock and a server-side in-progress guard (`409`, Spec §5.3), one user action can create several bets and debit the stake several times. That leads to reconciliation failures and complaints.
 * **Preconditions:**
-  * User balance is sufficient for multiple bets (e.g., €125.50).
-  * An upcoming match selection is populated in the Bet Slip with a valid stake (€10.00).
+  * Balance reset (enough for several bets); `balance_before` captured.
+  * `target_match` in the Bet Slip with stake `€10.00`.
 * **Steps:**
-  1. Populate the Bet Slip with an upcoming match and stake `€10.00`.
-  2. Trigger rapid, successive clicks on the `Place Bet` button (`#bet-slip-place-bet`) within <100ms.
-  3. Verify that on the very first click:
-     * The button immediately changes label to `Placing...`.
-     * The button attribute `disabled="true"` is applied immediately, suppressing all subsequent clicks.
-  4. Simultaneously, issue two concurrent HTTP `POST` requests to `/api/place-bet` using the same `x-user-id` and payload:
-     ```bash
-     curl -X POST /api/place-bet -d '{"matchId":"ligue-1-marseille-psg-2026-11-17","selection":"HOME","stake":10}' &
-     curl -X POST /api/place-bet -d '{"matchId":"ligue-1-marseille-psg-2026-11-17","selection":"HOME","stake":10}' &
+  1. **UI multi-click:** fire 3 click events on `#bet-slip-place-bet` within the same event-loop tick (JavaScript `element.click()` ×3 through `execute_script`, because WebDriver can't reliably click within 100 ms).
+  2. Verify that right after the first click, the label is `Placing...` and the `disabled` property is `true`.
+  3. Wait for the outcome; verify **exactly one** result modal appears (Spec §2.3, "one final outcome").
+  4. Close the receipt; `GET /api/balance` → verify `balance_before − 10.00`. Record it as `balance_mid`.
+  5. **API concurrency:** send N = 2 (then N = 5) identical `POST /api/place-bet` requests in parallel (thread pool, started from a shared barrier) with the same `x-user-id` and body:
+     ```json
+     { "matchId": "<target_match.id>", "selection": "HOME", "stake": 10.00 }
      ```
-  5. Inspect the HTTP responses from both concurrent requests.
-  6. Verify the final account balance and total bets placed.
+  6. Record every status code. Let `accepted = count(status == 200)`.
+  7. `GET /api/balance` → `balance_after`.
 * **Expected Result:**
-  * The UI strictly ignores duplicate clicks while in `Placing...` state.
-  * The backend returns HTTP `200 OK` for the first request and HTTP `409 Conflict` (error: `bet_in_progress` or `duplicate_request`) for the overlapping request.
-  * Exactly **one** bet is recorded; balance is debited by exactly €10.00 (not €20.00).
+  * **UI:** extra clicks during `Placing...` are ignored; exactly one bet is placed and €10.00 is debited.
+  * **API (an invariant that holds regardless of timing):**
+    * Every response is either `200` or `409` (bet already in progress); no `500`.
+    * `balance_mid − balance_after == 10.00 × accepted` (the ledger debits only accepted bets).
+    * `accepted ≥ 1`.
+  * *Note:* requests that do not overlap in time are legitimately separate bets. The test therefore checks that debits match accepted bets, not a fixed `200` + `409` pair, which avoids timing-dependent flakiness.
 
 ---
 
-### Scenario 6: System Resilience & Error Recovery Flow (Rebet vs Close)
+### Scenario 6: Failure Handling & Error Recovery (Rebet / Close / X)
 * **ID:** `TC-BET-006`
-* **Title:** Resilient Error Recovery on Server Failure (500 / Network Error) with Rebet and Close Actions
+* **Title:** Error Modal on Server Failure with Working Rebet, Close and X Actions and No Balance Deduction
 * **Priority:** Medium
-* **Risk Rationale:** Distributed backend services inevitably encounter intermittent timeouts, database deadlocks, or HTTP 500 errors. The client must not freeze in `Placing...`, must not deduct the stake, and must allow the user to either retry (`Rebet`) or abort (`Close`) without corrupting state.
+* **Risk Rationale:** Backends fail intermittently (timeouts, deadlocks, 500s). The client must not freeze in `Placing...`, must never deduct the stake for a failed bet, and must let the user retry (`Rebet`) or give up (`Close`/`X`) without leaving the slip in a broken state (Spec §2.3, §2.5).
 * **Preconditions:**
-  * Active selection in Bet Slip with stake `€10.00`.
-  * Mock or route failure simulated for `POST /api/place-bet` (e.g., invalid payload or simulated 500 error).
+  * `target_match` in the Bet Slip with stake `€10.00`; `balance_before` captured.
+  * **Failure injection:** use Chrome DevTools Protocol via Selenium. Call `Fetch.enable` with pattern `*/api/place-bet`, then answer the paused request with `Fetch.fulfillRequest` (`responseCode: 500`). Alternatively, use `Network.emulateNetworkConditions(offline=true)` for the network-error variant. (A deliberately invalid payload is **not** used: it causes a `400`/`422` validation response, not a server failure.)
 * **Steps:**
-  1. Populate the Bet Slip with selection and stake `€10.00`.
-  2. Trigger bet placement when the backend produces an error (HTTP 500 or network disconnect).
-  3. Verify the loading state clears and the Error Modal appears:
-     * Modal Title: `Something went wrong`
-     * Modal Body: Explains the bet could not be processed and suggests trying again.
-     * Actions Present: `Rebet` (primary button), `Close` (secondary button), and top-right `X`.
-  4. Verify the available balance is **not** deducted.
-  5. **Test Rebet Action**:
-     * Restore service connectivity.
-     * Click `Rebet`.
-     * Verify the modal closes and the placement request is immediately re-sent.
-     * Verify successful placement resolves to the Success Receipt Modal.
-  6. **Test Close / X Action**:
-     * Trigger the error modal again.
-     * Click `Close` (or top-right `X`).
-     * Verify the error modal closes.
-     * Verify the Bet Slip clears the current selection and stake back to empty state.
+  1. Enable the 500 interception and click `Place Bet`.
+  2. Verify `Placing...` clears (no endless spinner) and the Error Modal appears:
+     * Title: `Something went wrong`
+     * Body: says the bet could not be processed and suggests trying again
+     * Actions: `Rebet` (primary), `Close` (secondary), top-right `X`
+  3. `GET /api/balance` → verify it equals `balance_before`.
+  4. **Rebet:** turn off the interception and click `Rebet`.
+     * Verify the modal closes, a new `POST /api/place-bet` is sent with the **same** match, selection and stake, and the Success Receipt Modal appears.
+     * Verify the balance is now `balance_before − 10.00` (exactly one debit).
+  5. **Close:** set up a new selection with stake `€10.00`, re-enable the interception, and trigger the error modal. Click `Close`.
+     * Verify the modal closes and the Bet Slip has no selection and no stake.
+  6. **X:** repeat step 5 but dismiss with the top-right `X`.
+     * Verify the result is identical to `Close` (Spec §2.5).
+  7. Final `GET /api/balance` → verify it is unchanged since step 4.
 * **Expected Result:**
-  * Failed bets never deduct user balance.
-  * Error modal complies with UX requirements (`Something went wrong`, `Rebet`, `Close`).
-  * `Rebet` successfully retries the transaction; `Close` and `X` dismiss the modal and reset the bet slip.
+  * A failed placement never deducts the balance and never leaves the UI stuck in `Placing...`.
+  * The error modal text and actions match Spec §2.5.
+  * `Rebet` closes the modal and resends the same bet, which leads to a single success and a single debit.
+  * `Close` and `X` behave identically: the modal closes and the selection and stake are cleared.
 
 ---
+
+## 4. Traceability Summary
+
+| Spec section | Requirement | Scenario(s) |
+| :--- | :--- | :--- |
+| §1, §3 | Upcoming / pre-match only | TC-BET-004 |
+| §2.1 | Match list; selection replacement | TC-BET-001, TC-BET-004 |
+| §2.2 | Slip: one selection, stake, balance, payout | TC-BET-001 |
+| §2.2 | Remove All / per-selection `x` | Deferred (Phase 2) |
+| §2.3 | `Placing...` state, single final outcome, stake deducted | TC-BET-001, TC-BET-005, TC-BET-006 |
+| §2.4 | Receipt fields (all 7) | TC-BET-001 |
+| §2.5 | Error modal, Rebet / Close / X | TC-BET-006 |
+| §2.6 | Date / odds filters | Deferred (Phase 2) |
+| §3 | Stake min/max/precision, currency EUR | TC-BET-001, TC-BET-003 |
+| §4.1 | Stake required / numeric / min / max / precision / balance | TC-BET-002, TC-BET-003 |
+| §4.2 | Selection & match ID validation | TC-BET-003 (R1–R4), TC-BET-004 |
+| §4.3 | Payload / method / user context | TC-BET-003 (R5–R7) |
+| §4.4 | UI error copy | TC-BET-002, TC-BET-003 |
+| §5.3 | Response contract and error classes (400/401/405/409/422/500) | TC-BET-001, TC-BET-003, TC-BET-005, TC-BET-006 |
+| §5.3 | Reset-balance consistency | Exercised as a precondition in all scenarios |
