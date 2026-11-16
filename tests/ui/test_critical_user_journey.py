@@ -8,7 +8,7 @@ Why this test (risk-based selection):
   bet, so a wrong payout, wrong match order or missing selection directly misinforms the
   customer. Only the rendered UI shows what the customer actually sees, so this belongs at
   the E2E level. Rejection and business rules are tested more cheaply at the API level
-  (TC-API-002).
+  (TC-BET-002, TC-BET-003).
 - Every receipt value is checked against what was shown before placement (slip and match
   catalog), as the brief requires, not just for being present.
 

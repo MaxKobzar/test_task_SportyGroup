@@ -1,5 +1,6 @@
 """
-API Test Case: TC-API-002, a rejected stake never changes the user's balance.
+API Test Cases: TC-BET-002 (API layer) and TC-BET-003 rows S3/S9, a rejected stake never changes
+the user's balance.
 
 Why: ledger integrity is the top risk (RSK-01, score 9) with two Critical bugs confirmed
 (BUG-001 overdraft, BUG-004 negative stake adds money), and only the API can enforce it:
@@ -29,7 +30,7 @@ ILLEGAL_STAKES = [
         lambda balance: round(balance + 0.01, 2),
         ApiMethodNotAllowedError,
         "insufficient_balance",
-        id="overdraft_balance_plus_one_cent",
+        id="TC-BET-002_overdraft_balance_plus_one_cent",
         marks=pytest.mark.xfail(
             strict=True,
             reason="BUG-001: API accepts stake > balance and drives the balance negative",
@@ -39,7 +40,7 @@ ILLEGAL_STAKES = [
         lambda _: -50.00,
         ApiUnprocessableEntityError,
         "invalid_stake_min",
-        id="negative_stake",
+        id="TC-BET-003-S3_negative_stake",
         marks=pytest.mark.xfail(
             strict=True,
             reason="BUG-004: API accepts a negative stake and credits the balance",
@@ -49,7 +50,7 @@ ILLEGAL_STAKES = [
         lambda _: 10.001,
         ApiUnprocessableEntityError,
         "invalid_stake_precision",
-        id="three_decimal_places",
+        id="TC-BET-003-S9_three_decimal_places",
     ),
 ]
 
@@ -58,7 +59,7 @@ ILLEGAL_STAKES = [
 @allure.feature("Bet Placement REST API: Ledger Integrity")
 @pytest.mark.api()
 class TestRejectedStakeLedgerIntegrity:
-    @allure.story("TC-API-002: A rejected stake never changes the balance")
+    @allure.story("TC-BET-002 / TC-BET-003: A rejected stake never changes the balance")
     @allure.severity(allure.severity_level.BLOCKER)
     @pytest.mark.parametrize(("stake_for", "expected_exception", "expected_error"), ILLEGAL_STAKES)
     def test_illegal_stake_is_rejected_and_balance_unchanged(

@@ -28,6 +28,8 @@ sporty_group/
 │   │   ├── base_page.py               # Base Page with explicit waits, locators, safe actions
 │   │   ├── betting_page.py            # Betting Dashboard & Slip Page Object
 │   │   └── page_factory.py            # Page Factory implementing Factory Method pattern
+│   ├── data/
+│   │   └── bet_mother.py              # Object Mother: valid and illegal-stake PlaceBetRequest data
 │   └── screenplay/                    # Screenplay Pattern
 │       ├── actor.py                   # Screenplay Actor (named, can, attempts_to, asks_for)
 │       ├── abilities/
@@ -35,8 +37,9 @@ sporty_group/
 │       │   └── call_api.py            # Ability: CallAPI (wraps BettingApiClient)
 │       ├── tasks/                     # Composable business actions
 │       │   ├── navigate_to_app.py     # NavigateToApp
-│       │   ├── select_outcome.py      # SelectOutcome
+│       │   ├── select_outcome.py      # SelectMatchOutcome (by catalog match id)
 │       │   ├── place_bet.py           # EnterStakeAmount & SubmitBetPlacement
+│       │   ├── place_bet_api.py       # PlaceBetViaApi
 │       │   ├── close_receipt.py       # CloseReceiptModal
 │       │   ├── refresh_page.py        # RefreshPage
 │       │   └── reset_balance.py       # ResetBalanceViaApi
@@ -44,15 +47,18 @@ sporty_group/
 │           ├── current_balance.py     # DisplayedBalance
 │           ├── potential_payout.py    # PotentialPayout
 │           ├── error_message.py       # IsPlaceBetEnabled & InlineErrorMessage
-│           └── bet_receipt.py         # IsReceiptModalDisplayed
+│           ├── bet_receipt.py         # IsReceiptModalDisplayed
+│           ├── bet_slip_status.py     # IsBetSlipEmpty & BetSlipSelection
+│           ├── api_balance.py         # ApiBalance
+│           └── api_matches.py         # ApiMatches
 └── tests/
     ├── conftest.py                    # Shared test suite fixtures (lifecycle logging, reset_balance_precondition)
     ├── ui/
     │   ├── conftest.py                # UI fixtures (driver, bettor_actor Screenplay Actor)
-    │   └── test_critical_user_journey_e2e.py # Sole E2E UI critical user journey (Screenplay + BetMother)
+    │   └── test_critical_user_journey.py # TC-BET-001: single-bet journey and receipt (E2E)
     └── api/
-        ├── conftest.py                # API fixtures (api_actor Screenplay Actor)
-        └── test_bet_placement_api.py  # Sole REST API test suite (Screenplay + BetMother)
+        ├── conftest.py                # API fixtures (api_actor, drained_balance)
+        └── test_bet_placement.py      # TC-BET-002 / TC-BET-003 S3,S9: rejected stake leaves balance unchanged
 ```
 
 ---
@@ -68,8 +74,8 @@ sporty_group/
 - **Actor-centric architecture**: Tests read as user-centric narratives:
   ```python
   bettor_actor.attempts_to(
-      NavigateToApp.at(settings.target_url),
-      SelectOutcome.on_match(match_index=0, outcome="HOME"),
+      NavigateToApp.at(BettingPage),
+      SelectMatchOutcome.on(target_match.id, "HOME"),
       EnterStakeAmount.of(10.00),
       SubmitBetPlacement.now(),
       CloseReceiptModal.if_displayed(),
@@ -84,7 +90,7 @@ sporty_group/
 - **Root `conftest.py`**: Handles CLI inputs, global session fixtures (`test_config`, `api_client`), and the failure triage hook.
 - **`tests/conftest.py`**: Shared test suite fixtures (`log_test_lifecycle`, `reset_balance_precondition` state isolation).
 - **`tests/ui/conftest.py`**: Manages browser lifecycle (`driver`) and UI Screenplay Actor (`bettor_actor`).
-- **`tests/api/conftest.py`**: Provides REST API Screenplay Actor (`api_actor`).
+- **`tests/api/conftest.py`**: Provides REST API Screenplay Actor (`api_actor`) and the `drained_balance` precondition (balance below the maximum stake).
 
 ### 4. CLI Point of Input (`pytest_addoption`)
 Configurable flags supported:
@@ -128,23 +134,23 @@ poetry run pytest tests/
 poetry run pytest tests/api/
 ```
 
-#### Run Only UI Tests (Page Object Model)
+#### Run Only UI Tests (TC-BET-001 critical user journey)
 ```bash
-poetry run pytest tests/ui/test_pom_bet_placement.py
+poetry run pytest tests/ui/
 ```
 
-#### Run High-Value E2E Critical User Journey Tests
+#### Run a Single Test Plan Case
+Parametrized case IDs start with the test plan reference, so `-k` selects them:
 ```bash
-# POM implementation
-poetry run pytest tests/ui/test_critical_user_journey_e2e.py
-
-# Screenplay implementation
-poetry run pytest tests/ui/test_screenplay_critical_user_journey.py
+poetry run pytest tests/api/ -k "TC-BET-003"     # rows S3 and S9 only
 ```
 
-#### Run Only UI Tests (Screenplay Pattern)
+#### Known Bugs (strict xfail)
+Cases blocked by a confirmed defect are marked `xfail(strict=True)` with the bug ID (see `BUG_REPORTS.md`).
+A normal run shows them as `XFAIL`; once the bug is fixed the case turns `XPASS` and fails the run,
+so the marker must be removed. To see the real assertion failures:
 ```bash
-poetry run pytest tests/ui/test_screenplay_bet_placement.py
+poetry run pytest tests/ --runxfail
 ```
 
 #### Run in Headed Browser (Visible UI)
