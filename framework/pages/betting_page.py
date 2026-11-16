@@ -51,6 +51,7 @@ class BettingPage(BasePage):
     LOC_MODAL_ROOT = (By.ID, "modal-success")
     LOC_MODAL_CONTAINER = (By.CSS_SELECTOR, "#modal-success, div[role='dialog']")
     LOC_MODAL_TITLE = (By.CSS_SELECTOR, ".modalTitle")
+    LOC_MODAL_SUMMARY = (By.CSS_SELECTOR, "#modal-success .modalSummary")
     LOC_MODAL_BET_ID = (By.ID, "modal-success-bet-id")
     LOC_MODAL_MATCH = (By.ID, "modal-success-match")
     LOC_MODAL_STAKE = (By.ID, "modal-success-stake")
@@ -166,6 +167,7 @@ class BettingPage(BasePage):
         odds = self.get_text(self.LOC_MODAL_ODDS)
         payout = self.get_text(self.LOC_MODAL_PAYOUT)
         placed_at = self.get_text(self.LOC_MODAL_PLACED_AT)
+        summary = self.get_text(self.LOC_MODAL_SUMMARY)
 
         details = {
             "title": title,
@@ -175,6 +177,7 @@ class BettingPage(BasePage):
             "odds": odds,
             "payout": payout,
             "placed_at": placed_at,
+            "summary": summary,
         }
         logger.info(f"Confirmed receipt details: {details}")
         return details

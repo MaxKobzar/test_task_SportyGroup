@@ -16,3 +16,16 @@ class IsBetSlipEmpty:
         browser = actor.ability_to(BrowseTheWeb)
         page = browser.on_betting_page()
         return page.is_bet_slip_empty()
+
+
+class BetSlipSelection:
+    """Question reading the active selection shown in the Bet Slip (teams, market, odds)."""
+
+    @classmethod
+    def details(cls) -> "BetSlipSelection":
+        return cls()
+
+    def answered_by(self, actor) -> dict:
+        browser = actor.ability_to(BrowseTheWeb)
+        page = browser.on_betting_page()
+        return page.get_selection_details()

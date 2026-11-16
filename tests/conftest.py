@@ -32,13 +32,13 @@ def reset_balance_precondition(api_client: BettingApiClient) -> ResetBalanceResp
 @pytest.fixture()
 def target_match(api_client: BettingApiClient) -> Match:
     """
-    Precondition: Dynamically resolve an active upcoming match fixture from the live catalog.
-    Prevents test flakiness from hardcoded fixture IDs or stale events.
+    Precondition: Resolve an upcoming match (kickoff strictly after today) from the live catalog.
+    Same-day and past matches are excluded so a rejection can only come from the rule under
+    test, never from the event-status rule (BUG-003). No hardcoded IDs: the catalog is static
+    but the calendar is not.
     """
-    matches = api_client.get_matches()
-    for match in matches:
-        if match.kickoff_date >= date.today():
-            return match
-    if not matches:
-        raise RuntimeError("Live match catalog feed returned no fixtures.")
-    return matches[0]
+    today = date.today()
+    upcoming = [match for match in api_client.get_matches() if match.kickoff_date > today]
+    if not upcoming:
+        raise RuntimeError(f"Match catalog has no fixture with kickoff after {today}.")
+    return upcoming[0]

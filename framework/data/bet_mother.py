@@ -1,77 +1,24 @@
 """
 Object Mother: BetMother.
-Provides canonical test data fixtures and factory archetypes for wagering scenarios.
-Follows Martin Fowler's Object Mother pattern and TEA test data architecture standards.
-"""
+Named PlaceBetRequest archetypes for wagering scenarios. The match ID is always passed in
+(resolved from the live catalog), never hardcoded.
 
-from dataclasses import dataclass
-from typing import Any, Dict
+There are exactly two construction paths:
+- `for_outcome` validates the request (`model_validate`), so a "valid" bet is guaranteed to
+  respect the spec §3 stake bounds before it reaches the server;
+- `with_illegal_stake` skips validation (`model_construct`), so a rejection test can send a
+  stake the schema would refuse.
+Every other archetype delegates to one of them.
+"""
 
 from framework.api.models import OutcomeSelection, PlaceBetRequest
 
 
-@dataclass(frozen=True)
-class BetInput:
-    """
-    Canonical bettor input parameters for UI workflows and client interactions.
-    Encapsulates wager intent (selection & stake) without coupling to static fixture IDs.
-    """
-
-    selection: str = "HOME"
-    stake: float = 10.00
-
-    def to_request(self, match_id: str, **overrides: Any) -> PlaceBetRequest:
-        """Convert bettor input into a concrete API PlaceBetRequest for a specific match fixture."""
-        payload: Dict[str, Any] = {
-            "matchId": match_id,
-            "selection": self.selection,
-            "stake": self.stake,
-            **overrides,
-        }
-        return PlaceBetRequest.model_validate(payload)
-
-
 class BetMother:
-    """
-    Object Mother for generating domain-compliant PlaceBetRequest test payloads and UI bet inputs.
-    Eliminates static match assumptions by requiring dynamic match_id resolution from live feeds.
-    """
+    """Object Mother for PlaceBetRequest test data."""
 
     DEFAULT_STAKE: float = 10.00
-
-    # --------------------------------------------------------------------------
-    # API Request Archetypes (require explicit match_id from active catalog feed)
-    # --------------------------------------------------------------------------
-
-    @classmethod
-    def home_bet(
-        cls,
-        match_id: str,
-        stake: float = DEFAULT_STAKE,
-        **overrides: Any,
-    ) -> PlaceBetRequest:
-        """Create a standard bet on the HOME team for a specific match fixture."""
-        return cls._create(match_id=match_id, selection="HOME", stake=stake, **overrides)
-
-    @classmethod
-    def draw_bet(
-        cls,
-        match_id: str,
-        stake: float = DEFAULT_STAKE,
-        **overrides: Any,
-    ) -> PlaceBetRequest:
-        """Create a standard bet on a DRAW outcome for a specific match fixture."""
-        return cls._create(match_id=match_id, selection="DRAW", stake=stake, **overrides)
-
-    @classmethod
-    def away_bet(
-        cls,
-        match_id: str,
-        stake: float = DEFAULT_STAKE,
-        **overrides: Any,
-    ) -> PlaceBetRequest:
-        """Create a standard bet on the AWAY team for a specific match fixture."""
-        return cls._create(match_id=match_id, selection="AWAY", stake=stake, **overrides)
+    MAX_STAKE: float = 100.00  # spec §3: maximum stake per bet
 
     @classmethod
     def for_outcome(
@@ -79,78 +26,35 @@ class BetMother:
         selection: OutcomeSelection | str,
         match_id: str,
         stake: float = DEFAULT_STAKE,
-        **overrides: Any,
     ) -> PlaceBetRequest:
-        """Create a bet for any parameterized OutcomeSelection ('HOME', 'DRAW', 'AWAY')."""
-        return cls._create(match_id=match_id, selection=selection, stake=stake, **overrides)
+        """Valid bet on any outcome (HOME, DRAW, AWAY), validated against the request schema."""
+        return PlaceBetRequest.model_validate(
+            {"matchId": match_id, "selection": selection, "stake": stake}
+        )
 
     @classmethod
-    def minimum_stake_bet(
-        cls,
-        match_id: str,
-        selection: OutcomeSelection | str = "HOME",
-        **overrides: Any,
-    ) -> PlaceBetRequest:
-        """Create a boundary bet with the minimum allowed stake (€1.00)."""
-        return cls._create(match_id=match_id, selection=selection, stake=1.00, **overrides)
+    def home_bet(cls, match_id: str, stake: float = DEFAULT_STAKE) -> PlaceBetRequest:
+        """Valid bet on the home team."""
+        return cls.for_outcome(OutcomeSelection.HOME, match_id, stake)
 
     @classmethod
     def maximum_stake_bet(
-        cls,
-        match_id: str,
-        selection: OutcomeSelection | str = "HOME",
-        **overrides: Any,
+        cls, match_id: str, selection: OutcomeSelection | str = OutcomeSelection.HOME
     ) -> PlaceBetRequest:
-        """Create a boundary bet with the maximum allowed stake (€100.00)."""
-        return cls._create(match_id=match_id, selection=selection, stake=100.00, **overrides)
+        """Valid bet at the maximum allowed stake."""
+        return cls.for_outcome(selection, match_id, cls.MAX_STAKE)
 
     @classmethod
-    def sub_minimum_stake_bet(
+    def with_illegal_stake(
         cls,
         match_id: str,
-        selection: OutcomeSelection | str = "HOME",
-        stake: float = 0.50,
-        **overrides: Any,
-    ) -> PlaceBetRequest:
-        """Create an invalid boundary bet below minimum stake (€0.50) for negative testing."""
-        data: Dict[str, Any] = {
-            "matchId": match_id,
-            "selection": selection,
-            "stake": stake,
-            **overrides,
-        }
-        return PlaceBetRequest.model_construct(**data)
-
-    @classmethod
-    def exceeding_maximum_stake_bet(
-        cls,
-        match_id: str,
-        selection: OutcomeSelection | str = "HOME",
-        stake: float = 150.00,
-        **overrides: Any,
-    ) -> PlaceBetRequest:
-        """Create an invalid boundary bet exceeding maximum stake (€150.00) for negative testing."""
-        data: Dict[str, Any] = {
-            "matchId": match_id,
-            "selection": selection,
-            "stake": stake,
-            **overrides,
-        }
-        return PlaceBetRequest.model_construct(**data)
-
-    @classmethod
-    def _create(
-        cls,
-        match_id: str,
-        selection: Any,
         stake: float,
-        **overrides: Any,
+        selection: OutcomeSelection | str = OutcomeSelection.HOME,
     ) -> PlaceBetRequest:
-        """Internal builder producing a schema-validated PlaceBetRequest."""
-        payload: Dict[str, Any] = {
-            "matchId": match_id,
-            "selection": selection,
-            "stake": stake,
-            **overrides,
-        }
-        return PlaceBetRequest.model_validate(payload)
+        """
+        Bet whose stake breaks a business rule (overdraft, negative, precision, bounds).
+        Built without validation; the caller names the stake so the test states the rule.
+        """
+        return PlaceBetRequest.model_construct(
+            match_id=match_id, selection=OutcomeSelection(selection), stake=stake
+        )
