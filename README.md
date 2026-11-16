@@ -46,15 +46,13 @@ sporty_group/
 │           ├── error_message.py       # IsPlaceBetEnabled & InlineErrorMessage
 │           └── bet_receipt.py         # IsReceiptModalDisplayed
 └── tests/
-    ├── conftest.py                    # Shared lifecycle logging fixtures
+    ├── conftest.py                    # Shared test suite fixtures (lifecycle logging, reset_balance_precondition)
     ├── ui/
-    │   ├── conftest.py                # UI fixtures (driver, betting_page, bettor_actor, reset_precondition)
-    │   ├── test_pom_bet_placement.py  # UI tests via Page Object Model + Factory
-    │   ├── test_screenplay_bet_placement.py # UI tests via Screenplay Pattern
-    │   └── test_triage_hook_demo.py   # Intentional failure test demonstrating triage hook
+    │   ├── conftest.py                # UI fixtures (driver)
+    │   └── test_critical_user_journey_e2e.py # Sole E2E UI critical user journey (Screenplay)
     └── api/
-        ├── conftest.py                # API fixtures (reset_api_state)
-        └── test_betting_api.py        # REST API test suite via Requests
+        ├── conftest.py                # API fixtures (api_actor Screenplay Actor)
+        └── test_bet_placement_api.py  # Sole REST API test suite (Screenplay + BetMother)
 ```
 
 ---
@@ -83,9 +81,10 @@ sporty_group/
 - **Tasks & Questions**: Decouple intent ("what the user does") from technical implementation.
 
 ### 3. Hierarchical `conftest.py` Layout
-- **Root `conftest.py`**: Handles CLI inputs, global session fixtures (`settings`, `api_client`), and the failure triage hook.
-- **`tests/ui/conftest.py`**: Manages browser lifecycle (`driver`), Page Object instantiation via Factory (`betting_page`), Screenplay Actor (`bettor_actor`), and isolation preconditions (`reset_balance_precondition`).
-- **`tests/api/conftest.py`**: Provides auto-use reset fixtures (`reset_api_state`) to guarantee test isolation.
+- **Root `conftest.py`**: Handles CLI inputs, global session fixtures (`test_config`, `api_client`), and the failure triage hook.
+- **`tests/conftest.py`**: Shared test suite fixtures (`log_test_lifecycle`, `reset_balance_precondition` state isolation).
+- **`tests/ui/conftest.py`**: Manages browser lifecycle (`driver`).
+- **`tests/api/conftest.py`**: Provides Screenplay Actor (`api_actor`) with API calling ability.
 
 ### 4. CLI Point of Input (`pytest_addoption`)
 Configurable flags supported:

@@ -1,13 +1,12 @@
 """
 UI Test Fixtures.
-Provides function-level WebDriver instances configurable via parsed pytest_addoption,
-Page Objects via Factory, Screenplay Actors, and API-driven test isolation preconditions.
+Provides function-level WebDriver instances configurable via parsed pytest_addoption
+and WebDriverFactory.
 """
 
 import pytest
 from selenium import webdriver
 
-from framework.api.client import BettingApiClient
 from framework.core.logger import get_logger
 from framework.core.webdriver_factory import WebDriverFactory
 
@@ -46,10 +45,3 @@ def driver(request: pytest.FixtureRequest) -> webdriver.Remote:
     yield driver_instance
     logger.info("Quitting WebDriver instance...")
     driver_instance.quit()
-
-
-@pytest.fixture()
-def reset_balance_precondition(api_client: BettingApiClient):
-    """Precondition: Ensure candidate user starts each test with a clean baseline balance."""
-    logger.info("Precondition: Resetting user balance via API...")
-    return api_client.post_reset_balance()
