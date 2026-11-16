@@ -2,7 +2,7 @@
 
 - **Application Under Test (AUT):** [Sports Betting QA Application](https://qae-assignment-tau.vercel.app/?user-id=candidate-Mc2IYbjdqhj8)
 - **Specification Source:** [Feature_Specification.pdf](../materials/Feature_Specification.pdf)
-- **Defect Register:** [BUG_REPORTS.md](../bugs/BUG_REPORTS.md)
+- **Defect Register:** [BUG_REPORTS.md](BUG_REPORTS.md)
 - **Methodology:** Risk-Based Testing (RBT)
 - **Automation Stack:** Python / pytest / Selenium WebDriver (UI) + HTTP client (API), Screenplay pattern
 - **Reconnaissance Tooling:** Selenium MCP Server (`selenium-mcp-server` over stdio JSON-RPC)
@@ -24,11 +24,13 @@ The match catalog is static while the calendar is not: an "upcoming" match today
 
 | Data role | Resolution rule | Implementation |
 | :--- | :--- | :--- |
-| `target_match` (upcoming) | First match with `kickoffDate > today` (strictly after; `TODAY` excluded due to ambiguity — see Open Questions) | `target_match` fixture (suite-level `conftest.py`) |
-| `past_match` | Any match with `kickoffDate < today` | Resolved from `/api/matches` |
-| Initial balance | Taken from the `POST /api/reset-balance` response body, not hardcoded (observed value at time of writing: €125.50) | `reset_balance_precondition` fixture |
+| `target_match` (upcoming) | **Latest** upcoming match: the one with the greatest `kickoffDate`, where `kickoffDate > today` (strictly after; `TODAY` excluded due to ambiguity — see Open Questions). Choosing the latest keeps the data valid for as long as possible. Reference match on 2026-11-16: `mls-lafc-inter-miami-2026-12-28` (LAFC vs Inter Miami). | `target_match` fixture (suite-level `conftest.py`) |
+| `past_match` | Any match with `kickoffDate < today`. Reference: `mls-inter-miami-lafc-2026-06-20` (Inter Miami vs LAFC, 2026-06-20). | Resolved from `/api/matches` |
+| Initial balance | Call `POST /api/reset-balance`, then read the **persisted** value from `GET /api/balance`. Never trust the reset response body (see BUG-008) and never hardcode. Observed on 2026-11-16: reset response says €125.50, persisted balance is **€120.00**. | `reset_balance_precondition` fixture |
 
-Concrete values quoted in scenarios (team names, odds) are **illustrative examples** observed on 2026-11-16; assertions are computed from the resolved match's actual odds.
+**Reset consistency guard (BUG-008):** the `reset_balance_precondition` fixture also asserts `reset_response.balance == GET /api/balance` (Spec §5.3: *"Response body and persisted state must be consistent after reset"*). While BUG-008 is open, the fixture **records** this mismatch as a known-defect failure (e.g. a dedicated test marked `xfail(strict=True, reason="BUG-008")`) rather than failing every scenario's setup. Scenarios always continue from the persisted value, so their balance assertions stay correct whatever the reset endpoint returns.
+
+Concrete values quoted in scenarios (team names, odds) are **illustrative examples** taken from the reference matches above, as observed on 2026-11-16, and match the test data in [BUG_REPORTS.md](BUG_REPORTS.md); assertions are computed from the resolved match's actual odds.
 
 ### Scope Boundaries & Deferred Features (Phase 2)
 * **Match Catalog Filters (Spec §2.6)** — date and odds-range filters are non-transactional navigation aids; deferred to a dedicated discovery suite.
@@ -43,18 +45,21 @@ Spec Table 4.1 states `Minimum €1.01 (positive values)`, while §3 states `Sta
 3. **Past matches in catalog:** §2.1 says the list displays *upcoming* matches. Should `PAST` matches be hidden entirely, or displayed but non-selectable?
 
 ### Key Empirical Findings (Automated Reconnaissance)
-Discrepancies identified against the live application and factored into this plan (full details in [BUG_REPORTS.md](../bugs/BUG_REPORTS.md)):
+Medium-or-higher defects found on the live application (last verified 2026-11-16) and covered by this plan. Full details are in [BUG_REPORTS.md](BUG_REPORTS.md):
 
 | Bug ID | Finding | Severity | Covered by |
 | :--- | :--- | :--- | :--- |
 | BUG-001 | `POST /api/place-bet` accepts stake > balance → negative balance (e.g. `-30.00`) | Critical | TC-BET-002 |
-| BUG-002 | Receipt payout hardcoded to `stake * 2` (€5.00 @ 1.85 shows €10.00, not €9.25) | Critical | TC-BET-001 |
+| BUG-002 | Receipt payout hardcoded to `stake * 2` (€5.00 @ 3.05 shows €10.00, not €15.25) | Critical | TC-BET-001 |
 | BUG-003 | UI and API accept wagers on `PAST` matches | Critical | TC-BET-004 |
-| BUG-004 | Receipt shows `Away vs Home` (e.g. "PSG vs Marseille") | Medium | TC-BET-001 |
-| BUG-005 | `POST /api/place-bet` returns `currency: "USD"` instead of `"EUR"` | Medium | TC-BET-001 |
-| BUG-006 | Backend payout float error (`100 × 4.10` → `409.99`) | Low | TC-BET-003 |
+| BUG-004 | API accepts a negative stake and **credits** the balance (`-50` → +€50.00) | Critical | TC-BET-003 (row S3) |
+| BUG-005 | Header/slip balance not refreshed after a bet; the stale balance allows overdraft through the UI alone | High | TC-BET-001 (step 14), TC-BET-002 |
+| BUG-006 | Receipt shows `Away vs Home` (e.g. "Inter Miami vs LAFC") | Medium | TC-BET-001 |
+| BUG-007 | `POST /api/place-bet` returns `currency: "USD"` instead of `"EUR"` | Medium | TC-BET-001 |
+| BUG-008 | `reset-balance` response (€125.50) disagrees with persisted balance (€120.00) | Medium | Reset consistency guard (§1 Test Data Strategy) |
+| BUG-009 | Success receipt omits the Selection field | Medium | TC-BET-001 (step 12) |
 
-> Note: BUG-003 severity is aligned to **Critical** to match RSK-03 (past-posting yields guaranteed player wins). `BUG_REPORTS.md` should be updated accordingly.
+> Low-severity defects are tracked only in [BUG_REPORTS.md](BUG_REPORTS.md) and do not drive risk scoring in this plan.
 
 ---
 
@@ -64,8 +69,8 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
 
 | Risk ID | Category | Failure Mode / Threat | P | I | Score | Level | Scenario |
 | :--- | :--- | :--- | :-: | :-: | :-: | :--- | :--- |
-| **RSK-01** | Financial Integrity | Uncollateralized betting / negative balance via API bypass | 3 (BUG-001) | 3 | **9** | **CRITICAL** | `TC-BET-002` |
-| **RSK-02** | Contractual / Payout | Wrong payout, selection, or participants on receipt / API response | 3 (BUG-002/004/005) | 3 | **9** | **CRITICAL** | `TC-BET-001` |
+| **RSK-01** | Financial Integrity | Uncollateralized betting, negative balance or balance minting (API bypass, stale UI balance, negative stake) | 3 (BUG-001/004/005) | 3 | **9** | **CRITICAL** | `TC-BET-002`, `TC-BET-003` (S3) |
+| **RSK-02** | Contractual / Payout | Wrong payout, selection, or participants on receipt / API response | 3 (BUG-002/006/007/009) | 3 | **9** | **CRITICAL** | `TC-BET-001` |
 | **RSK-03** | Temporal Integrity | Wagering on past or started matches (past-posting) | 3 (BUG-003) | 3 | **9** | **CRITICAL** | `TC-BET-004` |
 | **RSK-04** | Concurrency | Double-click / parallel requests debit more than accepted bets | 2 | 3 | **6** | **HIGH** | `TC-BET-005` |
 | **RSK-05** | Input & Request Validation | Out-of-range / malformed stake, invalid selection or match, missing auth accepted | 2 | 3 | **6** | **HIGH** | `TC-BET-003` |
@@ -80,43 +85,43 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
 * **Title:** Successful Single Bet on an Upcoming Match with Balance Deduction, Receipt and API Contract Verification
 * **Priority:** Critical
 * **Scope / Designation:** Primary E2E critical user journey (automated in `tests/ui/test_critical_user_journey_e2e.py`)
-* **Risk Rationale:** The primary revenue transaction. If odds, stake, deducted balance and payout do not align across the bet slip, the receipt (the customer's contractual record) and the ledger, the operator faces disputes and regulatory penalties. Receipt defects BUG-002 and BUG-004 have already been observed, so this is also regression-critical.
+* **Risk Rationale:** The primary revenue transaction. If odds, stake, deducted balance and payout do not align across the bet slip, the receipt (the customer's contractual record) and the ledger, the operator faces disputes and regulatory penalties. Receipt defects BUG-002, BUG-006 and BUG-009 and the stale-balance defect BUG-005 have already been observed, so this is also regression-critical.
 * **Preconditions:**
-  * Balance reset via `POST /api/reset-balance`; `initial_balance` captured from the response body (observed: €125.50).
-  * `target_match` resolved from `GET /api/matches` as the first match with `kickoffDate > today`. Example: `Marseille vs PSG`, odds 1=4.10, X=3.70, 2=1.85.
+  * Balance reset via `POST /api/reset-balance`; `initial_balance` read from `GET /api/balance` (persisted value; observed: €120.00). The reset response body is not used (BUG-008).
+  * `target_match` resolved from `GET /api/matches` as the latest match with `kickoffDate > today`. Example: `LAFC vs Inter Miami` (`mls-lafc-inter-miami-2026-12-28`, kickoff 2026-12-28), odds 1=2.20, X=3.45, 2=3.05.
 * **Steps:**
   1. Open the application at `https://qae-assignment-tau.vercel.app/?user-id=candidate-Mc2IYbjdqhj8`.
-  2. Verify the header balance displays `initial_balance` (e.g. `€125.50`).
+  2. Verify the header balance displays `initial_balance` (e.g. `€120.00`).
   3. On the `target_match` card, click odds button `1` (Home).
   4. Verify the Bet Slip shows `Match Winner: Home` with the Home odds.
   5. On the same card, click odds button `2` (Away).
   6. Verify the Bet Slip **replaces** the selection (Spec §2.1/§2.2), and shows exactly one selection:
-     * Match title: `<homeTeam> vs <awayTeam>` (e.g. `Marseille vs PSG`)
+     * Match title: `<homeTeam> vs <awayTeam>` (e.g. `LAFC vs Inter Miami`)
      * Selection: `Match Winner: Away`
-     * Odds: `<odds.away>` (e.g. `1.85`)
+     * Odds: `<odds.away>` (e.g. `3.05`)
      * Available balance: `initial_balance` (Spec §2.2)
      * `Total Stake`: `€0.00`, `Potential Payout`: `€0.00`
      * `Place Bet` is disabled.
   7. Enter `10.00` in `#bet-slip-stake-input`.
   8. Verify the slip recalculates:
      * `Total Stake`: `€10.00`
-     * `Potential Payout`: `round(10.00 × odds.away, 2)` (e.g. `€18.50`)
+     * `Potential Payout`: `round(10.00 × odds.away, 2)` (e.g. `€30.50`)
      * `Place Bet` is enabled.
   9. Click `Place Bet` (`#bet-slip-place-bet`).
   10. Verify the button immediately shows `Placing...` and its `disabled` property is `true`.
   11. Wait for the Success Receipt Modal.
   12. Validate every receipt field required by Spec §2.4:
       * **Bet ID:** present and non-empty (observed format `#B-XXXXX`; the format is informational, not a spec requirement)
-      * **Match:** `Home vs Away` order (e.g. `Marseille vs PSG`) — regression for BUG-004
-      * **Selection:** `Away` / `Match Winner: Away`
+      * **Match:** `Home vs Away` order (e.g. `LAFC vs Inter Miami`) — regression for BUG-006
+      * **Selection:** `Away` / `Match Winner: Away` — regression for BUG-009
       * **Stake:** `€10.00`
       * **Odds at placement:** equal to the slip odds (odds are static for the session, Spec §3)
-      * **Potential payout:** `round(10.00 × odds.away, 2)` (e.g. `€18.50`) — regression for BUG-002
+      * **Potential payout:** `round(10.00 × odds.away, 2)` (e.g. `€30.50`) — regression for BUG-002
       * **Placement timestamp:** present and within the current minute
   13. Click `Close` on the modal.
-  14. Verify the modal closes, the Bet Slip has no active selection, and the header balance shows `initial_balance − 10.00` (e.g. `€115.50`).
+  14. Verify the modal closes, the Bet Slip has no active selection, and the header balance shows `initial_balance − 10.00` (e.g. `€110.00`) **without a page reload** — regression for BUG-005.
   15. **Ledger parity:** call `GET /api/balance`; verify `balance == initial_balance − 10.00` and `currency == "EUR"`.
-  16. **API contract parity** (direct `POST /api/place-bet` on `target_match`, `selection: "AWAY"`, `stake: 10.00`): verify the 200 response has `selection == "AWAY"`, `stake == 10`, `odds == odds.away`, `payout == round(10 × odds.away, 2)`, `balance == previous balance − 10`, and `currency == "EUR"` — regression for BUG-005.
+  16. **API contract parity** (direct `POST /api/place-bet` on `target_match`, `selection: "AWAY"`, `stake: 10.00`): verify the 200 response has `selection == "AWAY"`, `stake == 10`, `odds == odds.away`, `payout == round(10 × odds.away, 2)`, `balance == previous balance − 10`, and `currency == "EUR"` — regression for BUG-007.
 * **Expected Result:**
   * The selection is replaced, not added; the slip holds exactly one selection.
   * The bet moves from `Placing...` to a single success outcome.
@@ -131,18 +136,18 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
 * **ID:** `TC-BET-002`
 * **Title:** Reject Stakes Exceeding Available Balance at UI and API Layers (Including Exact-Balance Boundary)
 * **Priority:** Critical
-* **Risk Rationale:** Protects the platform from insolvency. If the backend relies on the client to block overdrafts, a user can wager funds they do not have, creating negative balances and unrecoverable debt. This has already been observed (BUG-001). The exact-balance boundary catches off-by-one comparisons (`<` vs `<=`).
+* **Risk Rationale:** Protects the platform from insolvency. If the backend relies on the client to block overdrafts, a user can wager funds they do not have, creating negative balances and unrecoverable debt. This has already been observed through the API (BUG-001) and through the UI alone because of a stale client balance (BUG-005). The exact-balance boundary catches off-by-one comparisons (`<` vs `<=`).
 * **Preconditions (deterministic setup — no set-balance endpoint exists):**
-  1. `POST /api/reset-balance` → capture `initial_balance` (observed €125.50).
-  2. `POST /api/place-bet` on `target_match` (`kickoffDate > today`) with `stake: 100.00` → expected balance `initial_balance − 100.00` (observed **€25.50**). Call this `B`.
+  1. `POST /api/reset-balance`, then `GET /api/balance` → `initial_balance` (persisted value; observed €120.00; the reset response body is not used, BUG-008).
+  2. `POST /api/place-bet` on `target_match` (`kickoffDate > today`) with `stake: 100.00`, then `GET /api/balance` → `B` (expected `initial_balance − 100.00`; observed **€20.00**).
   3. All steps below use `target_match`. **Do not use a past or same-day match:** a `422` must come only from the balance rule, not from the event-status rule.
 * **Steps:**
-  1. Open the application; verify the header and slip show balance `B` (e.g. `€25.50`).
+  1. Open the application (fresh page load, after the API setup bet); verify the header and slip show balance `B` (e.g. `€20.00`).
   2. Select an outcome on `target_match`.
   3. **Over-balance (UI):** enter a stake greater than `B` but within the maximum, e.g. `50.00`.
      * Verify the inline error `Insufficient balance` appears.
      * Verify the `Place Bet` `disabled` property is `true`.
-  4. **Balance + €0.01 (UI):** enter `B + 0.01` (e.g. `25.51`); verify the same error and disabled state.
+  4. **Balance + €0.01 (UI):** enter `B + 0.01` (e.g. `20.01`); verify the same error and disabled state.
   5. **API over-balance:** `POST /api/place-bet` with header `x-user-id: candidate-Mc2IYbjdqhj8` and body:
      ```json
      { "matchId": "<target_match.id>", "selection": "HOME", "stake": 50.00 }
@@ -150,7 +155,7 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
      Capture the status code and response body.
   6. **API balance + €0.01:** repeat step 5 with `stake: B + 0.01`.
   7. `GET /api/balance` → verify the balance is still exactly `B`.
-  8. **Exact-balance boundary (positive):** in the UI, enter a stake equal to `B` (e.g. `25.50`); verify there is no error and `Place Bet` is enabled. Place the bet.
+  8. **Exact-balance boundary (positive):** in the UI, enter a stake equal to `B` (e.g. `20.00`); verify there is no error and `Place Bet` is enabled. Place the bet.
   9. Verify the success receipt appears and `GET /api/balance` returns `0.00` (never negative).
 * **Expected Result:**
   * **UI:** stakes `> B` show `Insufficient balance` and lock `Place Bet`. A stake of exactly `B` is accepted.
@@ -163,10 +168,10 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
 * **ID:** `TC-BET-003`
 * **Title:** Boundary Value Analysis and Validation of Stake, Selection, Match ID, Payload and User Context at UI and API Layers
 * **Priority:** High
-* **Risk Rationale:** Validation edges are where off-by-one and type-coercion bugs live. Sub-minimum stakes enable micro-transaction abuse. Over-maximum stakes bypass exposure limits. Sub-cent precision causes ledger rounding drift (see BUG-006). If the API checks less than the UI, every UI rule can be bypassed with a direct request. Missing user context is an authorization weakness. One data-driven matrix covers Spec §4.1–§4.4 cheaply at the API level, while the UI rows cover the copy users see.
+* **Risk Rationale:** Validation edges are where off-by-one and type-coercion bugs live. Sub-minimum stakes enable micro-transaction abuse. Over-maximum stakes bypass exposure limits. Sub-cent precision causes ledger rounding drift. A negative stake that is accepted turns a bet into a balance credit (observed: BUG-004, Critical). If the API checks less than the UI, every UI rule can be bypassed with a direct request. Missing user context is an authorization weakness. One data-driven matrix covers Spec §4.1–§4.4 cheaply at the API level, while the UI rows cover the copy users see.
 * **Preconditions:**
   * Balance reset (≥ €100.00 available).
-  * `target_match` resolved (`kickoffDate > today`). For row S7, prefer a match whose odds have a float representation issue (e.g. `4.10`).
+  * `target_match` resolved (`kickoffDate > today`). For row S7, prefer an outcome where `100 × odds` is not exact in binary floating point (e.g. LAFC vs Inter Miami Home `2.20`: `100 × 2.2 = 220.00000000000003`), so the exact-to-the-cent check is meaningful.
 * **Steps:**
   1. Add a `target_match` selection to the Bet Slip.
   2. For each **UI stake row** below, clear `#bet-slip-stake-input`, type the input, and record: the displayed value, the inline message, and the `Place Bet` `disabled` property.
@@ -179,11 +184,11 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
   | :--- | :--- | :--- | :--- |
   | S1 | *(empty)* / omitted field | `Place Bet` disabled | `422` (or `400` if the schema treats it as malformed) |
   | S2 | `abc` / `"10"` (string in JSON) | Input rejected / not accepted; `Place Bet` disabled | `422` / `400` |
-  | S3 | `0` and `-5` | Minimum message; disabled | `422` |
+  | S3 | `0`, `-5`, `-50` | Minimum message, or the `-` sign is stripped by the input; disabled | `422`; balance unchanged (never credited) — regression for BUG-004 |
   | S4 | `0.99` | `Minimum stake is €1.00`; disabled | `422` |
   | S5 | `1.00` | No error; enabled (**if rejected → raise spec conflict, see §1**) | `200` |
   | S6 | `1.01` | No error; enabled | `200` |
-  | S7 | `100.00` | No error; enabled; payout = `round(100.00 × odds, 2)` (e.g. odds 4.10 → `€410.00`) | `200`; `payout == 410.00` exactly — regression for BUG-006 |
+  | S7 | `100.00` | No error; enabled; payout = `round(100.00 × odds, 2)` (e.g. odds 2.20 → `€220.00`) | `200`; `payout == 220.00` exactly |
   | S8 | `100.01` | `Maximum stake is €100.00`; disabled | `422` |
   | S9 | `10.555` | Third decimal blocked by the input **or** placement blocked with a precision message. Either is acceptable per Spec §4.1/§4.4. The value is never silently rounded and submitted. | `422` |
   | S10 | `1,5` / `1.2.3` (single decimal separator rule) | Rejected; `Place Bet` disabled | n/a (UI format rule) |
@@ -216,7 +221,7 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
 * **Priority:** Critical
 * **Risk Rationale:** The product is pre-match only (Spec §1, §3). Accepting bets on finished events lets players bet on known outcomes ("past-posting"): a guaranteed win for the player and a direct loss for the operator. This has already been observed (BUG-003).
 * **Preconditions:**
-  * `past_match` resolved from `GET /api/matches` as any match with `kickoffDate < today` (example: `premier-league-manutd-chelsea`, `Manchester Utd vs Chelsea`, kickoff 2026-02-27).
+  * `past_match` resolved from `GET /api/matches` as any match with `kickoffDate < today` (example: `mls-inter-miami-lafc-2026-06-20`, `Inter Miami vs LAFC`, kickoff 2026-06-20).
   * Balance reset; `balance_before` captured.
 * **Steps:**
   1. Open the application and view the match catalog.
@@ -315,4 +320,4 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
 | §4.3 | Payload / method / user context | TC-BET-003 (R5–R7) |
 | §4.4 | UI error copy | TC-BET-002, TC-BET-003 |
 | §5.3 | Response contract and error classes (400/401/405/409/422/500) | TC-BET-001, TC-BET-003, TC-BET-005, TC-BET-006 |
-| §5.3 | Reset-balance consistency | Exercised as a precondition in all scenarios |
+| §5.3 | Reset-balance consistency (response body == persisted state) | Reset consistency guard in `reset_balance_precondition` (BUG-008); every scenario uses the persisted value |
