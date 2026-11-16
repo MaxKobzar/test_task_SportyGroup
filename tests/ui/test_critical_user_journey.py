@@ -33,7 +33,11 @@ from framework.api.models import Match, PlaceBetRequest
 from framework.data.bet_mother import BetMother
 from framework.pages.betting_page import BettingPage
 from framework.screenplay.actor import Actor
-from framework.screenplay.questions.bet_receipt import IsReceiptModalDisplayed, ReceiptDetails
+from framework.screenplay.questions.bet_receipt import (
+    IsReceiptModalClosed,
+    IsReceiptModalDisplayed,
+    ReceiptDetails,
+)
 from framework.screenplay.questions.bet_slip_status import BetSlipSelection, IsBetSlipEmpty
 from framework.screenplay.questions.current_balance import DisplayedBalance
 from framework.screenplay.questions.error_message import IsPlaceBetEnabled
@@ -110,7 +114,6 @@ class TestSingleBetCriticalUserJourney:
 
         with allure.step("Verify receipt, slip reset and balance deduction"):
             receipt = bettor_actor.asks_for(ReceiptDetails.data())
-            bettor_actor.attempts_to(CloseReceiptModal.if_displayed())
             slip_empty_after = bettor_actor.asks_for(IsBetSlipEmpty.check())
             balance_after = bettor_actor.asks_for(DisplayedBalance.value())
 
@@ -135,8 +138,13 @@ class TestSingleBetCriticalUserJourney:
                     "Receipt placement timestamp"
                 ).is_not_empty()
                 assert_that(slip_empty_after).described_as(
-                    "Bet slip cleared after closing the receipt"
+                    "Bet slip cleared after placement"
                 ).is_true()
                 assert_that(balance_after).described_as(
                     "Header balance reduced by the stake, without reload"
                 ).is_equal_to(round(balance_before - bet.stake, 2))
+
+                bettor_actor.attempts_to(CloseReceiptModal.if_displayed())
+                assert_that(bettor_actor.asks_for(IsReceiptModalClosed.check())).described_as(
+                    "Receipt modal is closed"
+                ).is_true()

@@ -157,6 +157,10 @@ class BettingPage(BasePage):
             # Fallback to close button check
             return self.is_visible(self.LOC_MODAL_CLOSE_BTN, timeout=timeout)
 
+    def is_receipt_closed(self, timeout: int = 5) -> bool:
+        """Wait until the receipt modal is hidden or removed from the DOM."""
+        return bool(self.wait_for_invisibility(self.LOC_MODAL_ROOT, timeout=timeout))
+
     def get_receipt_details(self, timeout: int = 5) -> Dict[str, str]:
         """Retrieve all data attributes from the confirmed bet receipt modal."""
         self.wait.until(EC.visibility_of_element_located(self.LOC_MODAL_ROOT))

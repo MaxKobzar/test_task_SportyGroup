@@ -1,5 +1,5 @@
 """
-Screenplay Question: BetReceiptModal & ReceiptDetails.
+Screenplay Question: IsReceiptModalDisplayed, IsReceiptModalClosed & ReceiptDetails.
 """
 
 from typing import Dict
@@ -21,6 +21,22 @@ class IsReceiptModalDisplayed:
         browser = actor.ability_to(BrowseTheWeb)
         page = browser.on_betting_page()
         return page.is_receipt_displayed(timeout=self.timeout)
+
+
+class IsReceiptModalClosed:
+    """Question waiting until the receipt modal is no longer displayed."""
+
+    def __init__(self, timeout: int = 5):
+        self.timeout = timeout
+
+    @classmethod
+    def check(cls, timeout: int = 5) -> "IsReceiptModalClosed":
+        return cls(timeout=timeout)
+
+    def answered_by(self, actor) -> bool:
+        browser = actor.ability_to(BrowseTheWeb)
+        page = browser.on_betting_page()
+        return page.is_receipt_closed(timeout=self.timeout)
 
 
 class ReceiptDetails:
