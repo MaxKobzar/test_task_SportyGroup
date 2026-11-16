@@ -13,12 +13,12 @@ Why this test (risk-based selection):
   catalog), as the brief requires, not just for being present.
 
 Design notes:
-- One run, not HOME/DRAW/AWAY: the outcome changes neither the risk nor the code path, and
-  each extra browser run adds cost and flake exposure. Outcome coverage is cheaper via the API.
+- Parametrized over DRAW/HOME/AWAY: each outcome button must put its own odds and market
+  label on the slip and the receipt, so all three wirings are covered through the real UI.
 - The match comes from the API catalog with kickoff strictly after today (`target_match`),
   and its odds are the expected odds. No hardcoded IDs or values.
-- The balance is read straight after closing the receipt, WITHOUT a page reload: that is
-  what the user sees. A reload would hide BUG-005.
+- The balance is read right after placement, WITHOUT a page reload: that is what the user
+  sees. A reload would hide BUG-005.
 - Soft assertions collect every receipt and balance defect in a single run.
 - xfail(strict=True, raises=AssertionError) for the known receipt and balance defects:
   Selenium/infra errors still fail loudly, and when the bugs are fixed the XPASS is the
@@ -29,7 +29,7 @@ import allure
 import pytest
 from assertpy import assert_that, soft_assertions
 
-from framework.api.models import Match, PlaceBetRequest
+from framework.api.models import Match, OutcomeSelection, PlaceBetRequest
 from framework.data.bet_mother import BetMother
 from framework.pages.betting_page import BettingPage
 from framework.screenplay.actor import Actor
@@ -70,10 +70,15 @@ class TestSingleBetCriticalUserJourney:
             "BUG-009 receipt omits the selection; BUG-005 header balance not updated"
         ),
     )
+    @pytest.mark.parametrize(
+        "selection",
+        [OutcomeSelection.DRAW, OutcomeSelection.HOME, OutcomeSelection.AWAY],
+        ids=lambda selection: selection.value,
+    )
     def test_bettor_places_single_bet_and_receives_receipt(
-        self, bettor_actor: Actor, target_match: Match
+        self, bettor_actor: Actor, target_match: Match, selection: OutcomeSelection
     ) -> None:
-        bet: PlaceBetRequest = BetMother.home_bet(match_id=target_match.id)
+        bet: PlaceBetRequest = BetMother.for_outcome(selection, match_id=target_match.id)
         odds = target_match.odds.for_selection(bet.selection.value)
         expected_payout = round(bet.stake * odds, 2)
         expected_match_label = f"{target_match.home_team} vs {target_match.away_team}"
