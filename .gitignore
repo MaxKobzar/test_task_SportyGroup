@@ -1,11 +1,21 @@
+# Python
 __pycache__/
 *.py[cod]
-.idea/
+.venv/
 venv/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local configuration (copy .env.example to .env)
+.env
+
+# Reports
+reports/
 allure-results/
 allure-report/
-poetry.lock
+
+# IDE / OS
+.idea/
+.vscode/
 .DS_Store
-*.DS_Store
-reports/

@@ -1,7 +1,7 @@
 repos:
   # 1. Standard Git & File Hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -10,34 +10,36 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: ['--maxkb=500']
+      - id: detect-private-key
 
-  # 2. Ultra-fast Linting and Formatting (Ruff)
+  # 2. Linting and Formatting (Ruff; rules configured in pyproject.toml)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.4
+    rev: v0.17.5
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  # 3. Type Checking (Mypy)
+  # 3. Type Checking (Mypy; settings in pyproject.toml)
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v2.4.1
     hooks:
       - id: mypy
-        files: ^(framework|tests)/
+        files: ^(framework|tests)/|^conftest\.py$
         additional_dependencies:
           - types-requests
           - pydantic>=2.0.0
-        args:
-          - --ignore-missing-imports
-          - --check-untyped-defs
+          - selenium>=4.20.0
+          - pytest>=8.0.0
+          - assertpy>=2.0
+          - python-dotenv>=1.0.0
 
-  # 4. Pytest Collection Sanity Check
+  # 4. Pytest Collection Sanity Check (runs in the active project environment)
   - repo: local
     hooks:
       - id: pytest-collect
         name: pytest collection sanity check
-        entry: bash -c "if [ -f venv/bin/pytest ]; then venv/bin/pytest --collect-only -q; else pytest --collect-only -q; fi"
+        entry: python -m pytest --collect-only -q
         language: system
         pass_filenames: false
         always_run: true
@@ -50,3 +52,8 @@ repos:
         entry: '^\s*except\s+(Exception|BaseException)\b'
         language: pygrep
         types: [python]
+      - id: prohibit-env-file
+        name: prohibit committing .env
+        entry: .env must not be committed; use .env.example
+        language: fail
+        files: '^\.env$'

@@ -18,7 +18,7 @@
 
 ## Executive Summary & Defect Triage
 
-17 defects are confirmed: **4 Critical, 1 High, 5 Medium, 7 Low**. Together they let a player (a) bet money they do not have — through the API *and* through the normal UI, (b) **mint balance with a negative stake**, and (c) bet on matches that have already finished. The customer's receipt also misstates the payout, the match and the selection, and the API settles payouts a cent below what the Bet Slip promises. The Low findings are protocol-conformance gaps in the API and defects in the match-catalog filters (Spec §2.6).
+18 defects are confirmed: **4 Critical, 1 High, 5 Medium, 8 Low**. Together they let a player (a) bet money they do not have — through the API *and* through the normal UI, (b) **mint balance with a negative stake**, and (c) bet on matches that have already finished. The customer's receipt also misstates the payout, the match and the selection, and the API settles payouts a cent below what the Bet Slip promises. The Low findings are protocol-conformance gaps in the API, an OpenAPI document whose error examples do not match the server, and defects in the match-catalog filters (Spec §2.6).
 
 | Bug ID | Title | Severity | Layer | Impact Area |
 | :--- | :--- | :--- | :--- | :--- |
@@ -39,9 +39,10 @@
 | [**BUG-015**](#bug-015) | Odds filter lower bound is exclusive (spec: inclusive) | Low | UI | Catalog filters |
 | [**BUG-016**](#bug-016) | Match counter stuck at "Showing 103 matches"; no empty-state message | Low | UI | Catalog filters / UX |
 | [**BUG-017**](#bug-017) | Match card shows kickoff date only, no kickoff time | Low | UI + API | Match information |
+| [**BUG-018**](#bug-018) | OpenAPI shows `insufficient_balance` as the `405`/`409`/`500` error body; the server returns different bodies | Low | API docs | Contract documentation |
 
 **Notes on this revision**
-- IDs are ordered by severity. BUG-010 – BUG-017 were added on 2026-11-17. None of them repeats BUG-001 – BUG-009 or a check already listed under *Verified as working*. Each new report has a **Detected by** line naming the test case that catches it, or stating that none does.
+- IDs are ordered by severity. BUG-010 – BUG-018 were added on 2026-11-17. None of them repeats BUG-001 – BUG-009 or a check already listed under *Verified as working*. Each new report has a **Detected by** line naming the test case that catches it, or stating that none does.
 - Each defect has a **Test Data** line naming the exact data used and the equivalent data class that reproduces it if that data goes stale.
 - Expected results quote only spec-defined status classes. Error codes such as `invalid_stake_min` are quoted as observations, not requirements.
 - The frontend bundle is minified; quoted source lines are on line 49 of `/assets/index-BAomKdAy.js`.
@@ -382,3 +383,29 @@ Added 2026-11-17: a client-supplied `odds` field in the request body is ignored 
 * **Business Impact:** On match day customers can't tell whether a `TODAY` match has already kicked off, which matters for a pre-match-only product (test plan open question #2).
 * **Detected by:** Not covered.
 * **Evidence:** [bug_010_017_slip_payout_5_06.png](screenshots/bug_010_017_slip_payout_5_06.png) — card labels `Fri, Nov 13`, `Today`, `Saturday`, `Fri, Nov 27`, `Tue, Dec 01`, `Fri, Dec 04`, none with a time.
+
+---
+
+### BUG-018
+**Title:** OpenAPI Document Shows `insufficient_balance` as the `405` / `409` / `500` Error Body; the Server Returns Different Bodies
+**Severity:** Low
+
+* **Test Data:** No match data required for `405` and `500`. For `409`: `mls-lafc-inter-miami-2026-12-28`, selection `HOME`, stake `1`, any upcoming match works.
+* **Reproduction Steps:**
+  1. Open `https://qae-assignment-tau.vercel.app/api/docs` and expand the `405`, `409` and `500` responses of `POST /api/place-bet` (and the `405` of the other endpoints).
+  2. `curl -i -X PUT https://qae-assignment-tau.vercel.app/api/place-bet -H "x-user-id: candidate-Mc2IYbjdqhj8"`
+  3. Send 5 parallel `POST /api/place-bet` requests with `{"matchId":"mls-lafc-inter-miami-2026-12-28","selection":"HOME","stake":1}`.
+  4. `curl -i -X POST https://qae-assignment-tau.vercel.app/api/place-bet -H "Content-Type: application/json" -H "x-user-id: candidate-Mc2IYbjdqhj8" -d '{bad'`
+  5. Finish with `POST /api/reset-balance`.
+* **Expected Result:** The OpenAPI document describes the error body each status actually returns, as it already does for `400` and `422` (status-specific `examples`). A client or contract test generated from the document accepts real error responses.
+* **Actual Result:** `405`, `409` and `500` carry no `examples`. Swagger UI therefore renders the property-level examples of `components/schemas/Error` (`error: "insufficient_balance"`, `message: "Insufficient balance"`) as the body of all three statuses. The server returns:
+  | Status | Shown by Swagger | Returned by the server |
+  | :-: | :--- | :--- |
+  | `405` | `{"error":"insufficient_balance","message":"Insufficient balance"}` | `{"error":"method_not_allowed"}` (no `message`) |
+  | `409` | `{"error":"insufficient_balance","message":"Insufficient balance"}` | `{"error":"bet_in_progress","message":"A bet is already being processed for this user."}` |
+  | `500` | `{"error":"insufficient_balance","message":"Insufficient balance"}` | `{"error":"internal_server_error","message":"Unable to process request."}` |
+
+  Step 3 gave 3×`409` + 2×`200`. The document also never marks any schema property as `required`, so it does not state whether `message` may be omitted (the `405` body omits it).
+* **Business Impact:** Integrators and generated clients get a misleading contract: insufficient balance appears to be a `405`/`409`/`500` condition, and real `405`/`409`/`500` bodies fail validation against the documented example. Error handling built from the document mis-classifies these failures.
+* **Detected by:** Not covered by a test case. The framework's status-specific error models (`Error405`, `Error500` in `framework/api/models.py`) follow the Swagger examples, so a real `405` or `500` response raises `ApiContractViolationError`.
+* **Evidence:** `/api/docs` spec, `components/schemas/Error` and the `405`/`409`/`500` responses without `examples`; responses above (2026-11-17).

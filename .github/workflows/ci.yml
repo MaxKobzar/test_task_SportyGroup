@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Every run mutates the balance of one shared remote test user, so runs must never overlap.
+concurrency:
+  group: live-test-user
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint & type check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Poetry and dependencies
+        run: |
+          pipx install poetry
+          poetry install --no-interaction
+      - name: Run pre-commit hooks
+        run: |
+          pipx install pre-commit
+          source .venv/bin/activate
+          pre-commit run --all-files --show-diff-on-failure
+
+  tests:
+    name: API & UI tests
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      USER_ID: ${{ secrets.USER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install Poetry and dependencies
+        run: |
+          pipx install poetry
+          poetry install --no-interaction
+      - name: Run tests
+        run: poetry run pytest --junitxml=reports/junit.xml
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: reports/
+          retention-days: 14

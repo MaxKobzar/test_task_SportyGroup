@@ -1,2 +1,4 @@
 [virtualenvs]
-create = false
+# Project-local environment (.venv): installs never leak into the base interpreter.
+create = true
+in-project = true

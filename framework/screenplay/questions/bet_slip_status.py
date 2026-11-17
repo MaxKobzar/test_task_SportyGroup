@@ -1,31 +1,29 @@
 """
-Screenplay Question: IsBetSlipEmpty.
+Screenplay Questions: IsBetSlipEmpty & BetSlipSelection.
 """
 
+from framework.pages.betting_page import SlipSelection
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
+from framework.screenplay.actor import Actor
 
 
 class IsBetSlipEmpty:
-    """Question inspecting whether the Bet Slip is currently empty."""
+    """Whether the bet slip shows its empty state."""
 
     @classmethod
     def check(cls) -> "IsBetSlipEmpty":
         return cls()
 
-    def answered_by(self, actor) -> bool:
-        browser = actor.ability_to(BrowseTheWeb)
-        page = browser.on_betting_page()
-        return page.is_bet_slip_empty()
+    def answered_by(self, actor: Actor) -> bool:
+        return actor.ability_to(BrowseTheWeb).on_betting_page().is_bet_slip_empty()
 
 
 class BetSlipSelection:
-    """Question reading the active selection shown in the Bet Slip (teams, market, odds)."""
+    """The active selection shown in the bet slip (teams, market, odds)."""
 
     @classmethod
     def details(cls) -> "BetSlipSelection":
         return cls()
 
-    def answered_by(self, actor) -> dict:
-        browser = actor.ability_to(BrowseTheWeb)
-        page = browser.on_betting_page()
-        return page.get_selection_details()
+    def answered_by(self, actor: Actor) -> SlipSelection:
+        return actor.ability_to(BrowseTheWeb).on_betting_page().get_selection_details()

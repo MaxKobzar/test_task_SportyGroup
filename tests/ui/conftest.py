@@ -1,59 +1,32 @@
 """
 UI Test Fixtures.
-Provides function-level WebDriver instances, Screenplay actors,
-and test data fixtures configurable via parsed pytest_addoption and WebDriverFactory.
+Provides the function-level WebDriver and the Screenplay actor that browses the app.
 """
 
-import pytest
-from selenium import webdriver
+import logging
+from collections.abc import Generator
 
-from framework.core.logger import get_logger
+import pytest
+from selenium.webdriver.remote.webdriver import WebDriver
+
+from framework.config.settings import Settings
 from framework.core.webdriver_factory import WebDriverFactory
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 from framework.screenplay.actor import Actor
 
-logger = get_logger()
+logger = logging.getLogger(__name__)
 
 
-@pytest.fixture()
-def driver(request: pytest.FixtureRequest) -> webdriver.Remote:
-    """
-    Function-level WebDriver fixture.
-    Configurable depending on parsed pytest_addoption CLI arguments and .env.
-    """
-    browser = request.config.getoption("--browser")
-    headless_raw = request.config.getoption("--headless")
-    headless = (
-        headless_raw.lower() in ("true", "1", "yes")
-        if isinstance(headless_raw, str)
-        else bool(headless_raw)
-    )
-    browser_width = request.config.getoption("--browser-width")
-    browser_height = request.config.getoption("--browser-height")
-    timeout = request.config.getoption("--timeout")
-
-    logger.info(
-        f"Initializing function-level WebDriver from parsed pytest_addoption: "
-        f"browser={browser}, headless={headless}, viewport={browser_width}x{browser_height}, timeout={timeout}"
-    )
-
-    driver_instance = WebDriverFactory.create_driver(
-        browser=browser,
-        headless=headless,
-        browser_width=browser_width,
-        browser_height=browser_height,
-        timeout=timeout,
-    )
+@pytest.fixture
+def driver(settings: Settings) -> Generator[WebDriver, None, None]:
+    """Function-level WebDriver built from the session settings; always quit at teardown."""
+    driver_instance = WebDriverFactory.create_driver(settings)
     yield driver_instance
-    logger.info("Quitting WebDriver instance...")
+    logger.info("Quitting WebDriver")
     driver_instance.quit()
 
 
-@pytest.fixture()
-def bettor_actor(driver: webdriver.Remote) -> Actor:
-    """
-    Precondition: Screenplay Actor equipped with Desktop Chrome WebDriver ability.
-    Enables user-centric browser automation via BrowseTheWeb.
-    """
-    logger.info("Precondition: Initializing Bettor Actor with BrowseTheWeb ability...")
-    return Actor.named("Bettor").can(BrowseTheWeb.with_driver(driver))
+@pytest.fixture
+def bettor_actor(driver: WebDriver, settings: Settings) -> Actor:
+    """Precondition: Screenplay Actor able to browse the app as the configured user."""
+    return Actor.named("Bettor").can(BrowseTheWeb.using(driver, settings))

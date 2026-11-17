@@ -10,26 +10,30 @@ The framework is architected using industry best practices and clean engineering
 
 ```
 sporty_group/
-├── pyproject.toml                     # Poetry configuration & dependency specification
+├── .github/workflows/ci.yml           # CI: pre-commit (lint, types) then API & UI tests
+├── .pre-commit-config.yaml            # Ruff, mypy, collection check, guardrails
+├── .env.example                       # Template for the local .env (never commit .env)
+├── pyproject.toml                     # Poetry dependencies, dev tools, ruff & mypy config
 ├── poetry.lock                        # Locked dependencies
-├── pytest.ini                         # Pytest default CLI options, logging & markers
+├── pytest.ini                         # Pytest options, strict markers, logging format, markers
 ├── README.md                          # Framework documentation
-├── conftest.py                        # Root configuration: pytest_addoption & failure triage hook
+├── conftest.py                        # Root: pytest_addoption, settings/api_client fixtures, triage hook
 ├── framework/
 │   ├── config/
-│   │   └── settings.py                # Strongly-typed configuration parsed from CLI
+│   │   └── settings.py                # Strongly-typed Settings built from CLI options (.env defaults)
 │   ├── core/
-│   │   ├── webdriver_factory.py       # Factory producing configured Chrome WebDriver
-│   │   └── logger.py                  # Formatted execution logger
+│   │   └── webdriver_factory.py       # Factory producing configured Chrome WebDriver
 │   ├── api/
-│   │   ├── client.py                  # REST API client (Requests session, balance, matches, bets)
-│   │   └── models.py                  # Pydantic V2 models for API schema contracts
+│   │   ├── client.py                  # REST API client (session, timeouts, Allure telemetry)
+│   │   ├── exceptions.py              # Typed exceptions mapped from HTTP status codes
+│   │   └── models.py                  # Pydantic V2 contract models (Decimal money)
 │   ├── pages/                         # Page Object Model (POM)
 │   │   ├── base_page.py               # Base Page with explicit waits, locators, safe actions
 │   │   ├── betting_page.py            # Betting Dashboard & Slip Page Object
 │   │   └── page_factory.py            # Page Factory implementing Factory Method pattern
 │   ├── data/
-│   │   └── bet_mother.py              # Object Mother: valid and illegal-stake PlaceBetRequest data
+│   │   ├── bet_mother.py              # Object Mother: valid and illegal-stake PlaceBetRequest data
+│   │   └── money.py                   # Decimal money: half-up rounding, EUR formatting, parsing
 │   └── screenplay/                    # Screenplay Pattern
 │       ├── actor.py                   # Screenplay Actor (named, can, attempts_to, asks_for)
 │       ├── abilities/
@@ -68,44 +72,51 @@ sporty_group/
 ### 1. Page Object Model (POM) & Page Factory (Factory Method)
 - **`BasePage`** encapsulates explicit wait strategies (`WebDriverWait`), locator abstractions, element interactions, and resilience mechanisms.
 - **`BettingPage`** encapsulates the dashboard, match cards, odds buttons, bet slip inputs, and modal dialogs.
-- **`PageFactory`** implements the **Factory Method** design pattern (`PageFactory.get_page(PageType.BETTING, driver)`), decoupling test logic from concrete page construction.
+- **`PageFactory`** implements the **Factory Method** design pattern (`PageFactory.get_page(PageType.BETTING, driver, timeout)`), decoupling test logic from concrete page construction.
+- **Locator policy**: stable element ids first; where the app has no id, class selectors are scoped under the nearest id.
+- **Waits**: explicit waits only (implicit wait is 0), all driven by `--timeout`. Only `TimeoutException` becomes a boolean answer; any other WebDriver error propagates.
 
 ### 2. Screenplay Pattern
 - **Actor-centric architecture**: Tests read as user-centric narratives:
   ```python
   bettor_actor.attempts_to(
       NavigateToApp.at(BettingPage),
-      SelectMatchOutcome.on(target_match.id, "HOME"),
-      EnterStakeAmount.of(10.00),
+      SelectMatchOutcome.on(target_match.id, SelectionType.HOME),
+      EnterStakeAmount.of(Decimal("10.00")),
       SubmitBetPlacement.now(),
       CloseReceiptModal.if_displayed(),
       RefreshPage.now(),
   )
   balance = bettor_actor.asks_for(DisplayedBalance.value())
   ```
-- **Abilities**: `BrowseTheWeb` and `CallAPI` bridge the Actor to the browser and REST endpoints.
-- **Tasks & Questions**: Decouple intent ("what the user does") from technical implementation.
+- **Abilities**: `BrowseTheWeb` (driver, app URL and timeout from `Settings`) and `CallAPI` bridge the Actor to the browser and REST endpoints.
+- **Tasks & Questions**: Decouple intent ("what the user does") from technical implementation. They are typed through the `Task` / `Question[T]` protocols and never touch locators.
+
+### Money and API contracts
+- Money is `Decimal` end to end: responses are parsed with `parse_float=Decimal`, expected values round half-up to cents (`framework/data/money.py`).
+- Response models encode the contract and the domain rules (balance ≥ 0, stake €1.00–€100.00 with cent precision, odds > 1, payout > 0). A 2xx response that breaks them raises `ApiContractViolationError` naming the field, the received value and the rule; the raw body is in the Allure HTTP step.
+- Every HTTP call has a timeout; non-2xx responses raise the typed exception for the status code, carrying the parsed error body (never a made-up one).
 
 ### 3. Hierarchical `conftest.py` Layout
-- **Root `conftest.py`**: Handles CLI inputs, global session fixtures (`test_config`, `api_client`), and the failure triage hook.
-- **`tests/conftest.py`**: Shared test suite fixtures (`log_test_lifecycle`, `reset_balance_precondition` state isolation).
+- **Root `conftest.py`**: Handles CLI inputs, global session fixtures (`settings`, `api_client`), and the failure triage hook.
+- **`tests/conftest.py`**: Shared test suite fixtures (`reset_balance_precondition` state isolation, `target_match` from the live catalog).
 - **`tests/ui/conftest.py`**: Manages browser lifecycle (`driver`) and UI Screenplay Actor (`bettor_actor`).
 - **`tests/api/conftest.py`**: Provides REST API Screenplay Actor (`api_actor`) and the `drained_balance` precondition (balance below the maximum stake).
 
 ### 4. CLI Point of Input (`pytest_addoption`)
-Configurable flags supported:
-- `--base-url`: Target application URL (default: `https://qae-assignment-tau.vercel.app`).
-- `--user-id`: Candidate test ID (default: `candidate-Mc2IYbjdqhj8`).
-- `--browser`: Browser selection (default: `chrome`).
-- `--headless`: Headless mode toggle (`true` / `false`, default: `true`).
+Every flag defaults from the matching `.env` / environment variable; the CLI always wins.
+- `--base-url` (`BASE_URL`): Target application URL (default: `https://qae-assignment-tau.vercel.app`).
+- `--user-id` (`USER_ID`): Candidate user id sent as `x-user-id`. **Required**, no default.
+- `--browser` (`BROWSER`): Browser selection (default: `chrome`).
+- `--headless` (`HEADLESS`): `true` / `false` (default: `false` locally, `true` when `CI` is set).
 - `--browser-width` / `--browser-height`: Window resolution (default: `1440x900`).
+- `--timeout` (`TIMEOUT`): Explicit wait and HTTP timeout in seconds (default: `10`).
 
 ### 5. Failure Triage Hook (`pytest_runtest_makereport`)
-When any test fails, the hook automatically extracts and attaches diagnostic artifacts into Allure:
+When a test fails in setup or in its body (including expected failures), the hook attaches diagnostic artifacts to Allure:
 1. **Browser Screenshot** (PNG) captured directly from the active WebDriver session.
 2. **Page Source** (HTML) of the exact DOM state at failure time.
-3. **Execution Traceback Log** containing test output and error logs.
-   *(Includes the integration hook line: `# Application log also added here`)*.
+3. **Execution Traceback Log** containing the failure traceback.
 
 ---
 
@@ -119,7 +130,9 @@ When any test fails, the hook automatically extracts and attaches diagnostic art
 
 ### 1. Installation via Poetry
 ```bash
-poetry install
+poetry install                 # creates the project-local .venv (runtime + dev tools)
+cp .env.example .env           # then set USER_ID
+pre-commit install             # optional (pipx install pre-commit): hooks on every commit
 ```
 
 ### 2. Running Tests
@@ -146,7 +159,8 @@ poetry run pytest tests/api/ -k "TC-BET-003"     # rows S3 and S9 only
 ```
 
 #### Known Bugs (strict xfail)
-Cases blocked by a confirmed defect are marked `xfail(strict=True)` with the bug ID (see `BUG_REPORTS.md`).
+Cases blocked by a confirmed defect are marked `xfail` (strict globally via `xfail_strict = true`) with the bug ID and the exact
+failure type the bug produces (`raises=`), so an unrelated error still fails the run (see `BUG_REPORTS.md`).
 A normal run shows them as `XFAIL`; once the bug is fixed the case turns `XPASS` and fails the run,
 so the marker must be removed. To see the real assertion failures:
 ```bash
@@ -160,8 +174,13 @@ poetry run pytest tests/ui/ --headless false
 
 #### Run with Custom Base URL or User ID
 ```bash
-poetry run pytest --base-url "https://qae-assignment-tau.vercel.app" --user-id "candidate-Mc2IYbjdqhj8"
+poetry run pytest --base-url "https://qae-assignment-tau.vercel.app" --user-id "<candidate-user-id>"
 ```
+
+### Continuous Integration
+`.github/workflows/ci.yml` runs the pre-commit hooks, then the full suite headless, and uploads JUnit and Allure
+results. Set the repository secret `USER_ID`. Runs are serialized (`concurrency`) because every run
+mutates the balance of the same remote test user.
 
 ### 3. Generating & Viewing Allure Report
 ```bash

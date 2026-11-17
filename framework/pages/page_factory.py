@@ -1,47 +1,44 @@
 """
 Page Factory module.
-Implements the Factory Method pattern to instantiate and configure Page Objects.
+Factory Method for Page Objects: callers name a page (PageType or the class itself) and
+receive an instance wired with the session driver and timeout.
 """
 
 from enum import Enum
-from typing import Type, Union
+from typing import TypeVar, overload
 
-from selenium import webdriver
+from selenium.webdriver.remote.webdriver import WebDriver
 
 from framework.pages.base_page import BasePage
 from framework.pages.betting_page import BettingPage
 
+TPage = TypeVar("TPage", bound=BasePage)
+
 
 class PageType(str, Enum):
-    """Enumeration of supported application page types."""
+    """Supported application pages."""
 
     BETTING = "betting"
 
 
+_PAGES: dict[PageType, type[BasePage]] = {
+    PageType.BETTING: BettingPage,
+}
+
+
 class PageFactory:
-    """Factory Method pattern implementation for Page Object creation."""
+    """Factory Method implementation for Page Object creation."""
+
+    @overload
+    @staticmethod
+    def get_page(page: type[TPage], driver: WebDriver, timeout: float) -> TPage: ...
+
+    @overload
+    @staticmethod
+    def get_page(page: PageType, driver: WebDriver, timeout: float) -> BasePage: ...
 
     @staticmethod
-    def get_page(
-        page_type: Union[PageType, str, Type[BasePage]],
-        driver: webdriver.Remote,
-        **kwargs,
-    ) -> BasePage:
-        """
-        Factory Method creating and returning the appropriate BasePage subclass.
-        :param page_type: Enum, string identifier, or POM class directly.
-        :param driver: Active Selenium WebDriver instance.
-        :param kwargs: Optional parameters passed to page constructor.
-        :return: An instance of the corresponding Page Object.
-        """
-        # 1. Direct Page Object Model class support (e.g. BettingPage)
-        if isinstance(page_type, type) and issubclass(page_type, BasePage):
-            return page_type(driver=driver, **kwargs)
-
-        # 2. String or Enum key resolution
-        key = page_type.value if isinstance(page_type, PageType) else str(page_type).lower()
-
-        if key in (PageType.BETTING.value, "betting", "bettingpage"):
-            return BettingPage(driver=driver, **kwargs)
-
-        raise ValueError(f"Unrecognized PageType '{page_type}'. Cannot instantiate Page Object.")
+    def get_page(page: type[BasePage] | PageType, driver: WebDriver, timeout: float) -> BasePage:
+        """Instantiate the Page Object for a PageType or a BasePage subclass."""
+        page_cls = _PAGES[page] if isinstance(page, PageType) else page
+        return page_cls(driver=driver, timeout=timeout)

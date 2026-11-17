@@ -1,57 +1,42 @@
 """
 Screenplay Ability: BrowseTheWeb.
-Applies 'The Ideal Synergy':
-The Actor's BrowseTheWeb ability delegates all page creation and DOM interactions
-to PageFactory.get_page(page_type, driver).
-This ensures strict decoupling:
-- Tasks & Questions express user behavior and intent (Screenplay).
-- Page Objects encapsulate locators, explicit waits, and DOM mechanics (POM).
-- PageFactory provides the centralized Factory Method instantiation.
+The Screenplay-POM bridge: Tasks and Questions express user intent, Page Objects own
+locators and waits, and this ability obtains pages through PageFactory with the session
+driver, application URL and timeout.
 """
 
-from typing import Dict, Type, TypeVar, Union, cast
+from typing import TypeVar, cast
 
-from selenium import webdriver
+from selenium.webdriver.remote.webdriver import WebDriver
 
+from framework.config.settings import Settings
 from framework.pages.base_page import BasePage
 from framework.pages.betting_page import BettingPage
-from framework.pages.page_factory import PageFactory, PageType
+from framework.pages.page_factory import PageFactory
 
 TPage = TypeVar("TPage", bound=BasePage)
 
 
 class BrowseTheWeb:
-    """
-    Ability enabling an Actor to browse web applications.
-    Implements the Screenplay-POM bridge by delegating page instantiation
-    to PageFactory.
-    """
+    """Ability to use the web application in a browser."""
 
-    def __init__(self, driver: webdriver.Remote):
+    def __init__(self, driver: WebDriver, app_url: str, timeout: float):
         self.driver = driver
-        self._page_cache: Dict[str, BasePage] = {}
+        self.app_url = app_url
+        self.timeout = timeout
+        self._pages: dict[type[BasePage], BasePage] = {}
 
     @classmethod
-    def with_driver(cls, driver: webdriver.Remote) -> "BrowseTheWeb":
-        return cls(driver=driver)
+    def using(cls, driver: WebDriver, settings: Settings) -> "BrowseTheWeb":
+        """Create the ability from the session driver and settings."""
+        return cls(driver=driver, app_url=settings.app_url, timeout=settings.timeout)
 
-    def on(self, page_type: Union[PageType, str, Type[BasePage]] = PageType.BETTING) -> BasePage:
-        """
-        Core delegation method: Obtains a Page Object via PageFactory.
-        Maintains an internal cache for performance and state consistency.
-        Supports PageType enum, string identifier, or POM class directly.
-        """
-        if isinstance(page_type, type):
-            key = page_type.__name__
-        elif isinstance(page_type, PageType):
-            key = page_type.value
-        else:
-            key = str(page_type).lower()
-
-        if key not in self._page_cache:
-            self._page_cache[key] = PageFactory.get_page(page_type, self.driver)
-        return self._page_cache[key]
+    def on(self, page_cls: type[TPage]) -> TPage:
+        """Page Object for page_cls, created once per ability via PageFactory."""
+        if page_cls not in self._pages:
+            self._pages[page_cls] = PageFactory.get_page(page_cls, self.driver, self.timeout)
+        return cast(TPage, self._pages[page_cls])
 
     def on_betting_page(self) -> BettingPage:
-        """Convenience method delegating to PageFactory for BettingPage."""
-        return cast(BettingPage, self.on(BettingPage))
+        """Shortcut for the betting page."""
+        return self.on(BettingPage)

@@ -1,35 +1,33 @@
 """
-Screenplay Task: PlaceBet.
-Handles entering stake and clicking place bet.
+Screenplay Tasks: EnterStakeAmount & SubmitBetPlacement.
 """
 
+from decimal import Decimal
+
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
+from framework.screenplay.actor import Actor
 
 
 class EnterStakeAmount:
-    """Task to input stake into the bet slip."""
+    """Task to type the stake into the bet slip."""
 
-    def __init__(self, amount: float | str):
+    def __init__(self, amount: Decimal):
         self.amount = amount
 
     @classmethod
-    def of(cls, amount: float | str) -> "EnterStakeAmount":
+    def of(cls, amount: Decimal) -> "EnterStakeAmount":
         return cls(amount=amount)
 
-    def perform_as(self, actor) -> None:
-        browser = actor.ability_to(BrowseTheWeb)
-        page = browser.on_betting_page()
-        page.enter_stake(self.amount)
+    def perform_as(self, actor: Actor) -> None:
+        actor.ability_to(BrowseTheWeb).on_betting_page().enter_stake(self.amount)
 
 
 class SubmitBetPlacement:
-    """Task to click Place Bet button."""
+    """Task to click Place Bet and wait for the placement to complete."""
 
     @classmethod
     def now(cls) -> "SubmitBetPlacement":
         return cls()
 
-    def perform_as(self, actor) -> None:
-        browser = actor.ability_to(BrowseTheWeb)
-        page = browser.on_betting_page()
-        page.click_place_bet()
+    def perform_as(self, actor: Actor) -> None:
+        actor.ability_to(BrowseTheWeb).on_betting_page().place_bet()

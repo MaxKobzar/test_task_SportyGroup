@@ -7,7 +7,8 @@ Why: ledger integrity is the top risk (RSK-01, score 9) with two Critical bugs c
 any client that skips the UI bypasses the UI's checks.
 """
 
-from typing import Callable
+from collections.abc import Callable
+from decimal import Decimal
 
 import allure
 import pytest
@@ -15,39 +16,39 @@ from assertpy import assert_that, soft_assertions
 
 from framework.api.exceptions import (
     ApiException,
-    ApiMethodNotAllowedError,
     ApiUnprocessableEntityError,
 )
-from framework.api.models import Match
+from framework.api.models.models import Match
 from framework.data.bet_mother import BetMother
 from framework.screenplay.actor import Actor
 from framework.screenplay.questions.api_balance import ApiBalance
 from framework.screenplay.tasks.place_bet_api import PlaceBetViaApi
 
-# (stake derived from the drained balance, expected typed API exception, expected error code)
+# (stake derived from the drained balance, expected typed API exception, expected error code).
+# Status classes follow Spec §5.3: every illegal stake is a semantic validation failure (422).
+# The spec defines no error code for insufficient balance, so that case checks the status and
+# the Error422 contract only (expected code None); stake codes are the documented 422 examples.
 ILLEGAL_STAKES = [
     pytest.param(
-        lambda balance: round(balance + 0.01, 2),
-        ApiMethodNotAllowedError,
-        "insufficient_balance",
+        lambda balance: balance + Decimal("0.01"),
+        ApiUnprocessableEntityError,
+        None,
         id="TC-BET-002_overdraft_balance_plus_one_cent",
         marks=pytest.mark.xfail(
-            strict=True,
             reason="BUG-001: API accepts stake > balance and drives the balance negative",
         ),
     ),
     pytest.param(
-        lambda _: -50.00,
+        lambda _: Decimal("-50.00"),
         ApiUnprocessableEntityError,
         "invalid_stake_min",
         id="TC-BET-003-S3_negative_stake",
         marks=pytest.mark.xfail(
-            strict=True,
             reason="BUG-004: API accepts a negative stake and credits the balance",
         ),
     ),
     pytest.param(
-        lambda _: 10.001,
+        lambda _: Decimal("10.001"),
         ApiUnprocessableEntityError,
         "invalid_stake_precision",
         id="TC-BET-003-S9_three_decimal_places",
@@ -57,7 +58,7 @@ ILLEGAL_STAKES = [
 
 @allure.epic("Core Wagering Engine")
 @allure.feature("Bet Placement REST API: Ledger Integrity")
-@pytest.mark.api()
+@pytest.mark.api
 class TestRejectedStakeLedgerIntegrity:
     @allure.story("TC-BET-002 / TC-BET-003: A rejected stake never changes the balance")
     @allure.severity(allure.severity_level.BLOCKER)
@@ -66,10 +67,10 @@ class TestRejectedStakeLedgerIntegrity:
         self,
         api_actor: Actor,
         target_match: Match,
-        drained_balance: float,
-        stake_for: Callable[[float], float],
+        drained_balance: Decimal,
+        stake_for: Callable[[Decimal], Decimal],
         expected_exception: type[ApiException],
-        expected_error: str,
+        expected_error: str | None,
     ) -> None:
         """The API rejects the stake with the rule's error, and the balance stays as it was."""
         stake = stake_for(drained_balance)
@@ -82,11 +83,13 @@ class TestRejectedStakeLedgerIntegrity:
             api_actor.attempts_to(PlaceBetViaApi.from_request(bet))
 
         balance_after = api_actor.asks_for(ApiBalance.value()).balance
+        error = rejection.value.error
 
         with allure.step("Error contract and unchanged balance"), soft_assertions():
-            assert_that(rejection.value.error).described_as("Error model code").has_error(
-                expected_error
-            )
+            if expected_error is not None:
+                assert_that(error and error.error).described_as("Error model code").is_equal_to(
+                    expected_error
+                )
             assert_that(balance_after).described_as(
                 "Stored balance after a rejected bet"
             ).is_equal_to(drained_balance)

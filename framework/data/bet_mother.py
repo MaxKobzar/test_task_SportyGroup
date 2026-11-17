@@ -11,21 +11,23 @@ There are exactly two construction paths:
 Every other archetype delegates to one of them.
 """
 
-from framework.api.models import OutcomeSelection, PlaceBetRequest
+from decimal import Decimal
+
+from framework.api.models.models import PlaceBetRequest, SelectionType
 
 
 class BetMother:
     """Object Mother for PlaceBetRequest test data."""
 
-    DEFAULT_STAKE: float = 10.00
-    MAX_STAKE: float = 100.00  # spec §3: maximum stake per bet
+    DEFAULT_STAKE = Decimal("10.00")
+    MAX_STAKE = Decimal("100.00")  # spec §3: maximum stake per bet
 
     @classmethod
     def for_outcome(
         cls,
-        selection: OutcomeSelection | str,
+        selection: SelectionType,
         match_id: str,
-        stake: float = DEFAULT_STAKE,
+        stake: Decimal = DEFAULT_STAKE,
     ) -> PlaceBetRequest:
         """Valid bet on any outcome (HOME, DRAW, AWAY), validated against the request schema."""
         return PlaceBetRequest.model_validate(
@@ -33,13 +35,8 @@ class BetMother:
         )
 
     @classmethod
-    def home_bet(cls, match_id: str, stake: float = DEFAULT_STAKE) -> PlaceBetRequest:
-        """Valid bet on the home team."""
-        return cls.for_outcome(OutcomeSelection.HOME, match_id, stake)
-
-    @classmethod
     def maximum_stake_bet(
-        cls, match_id: str, selection: OutcomeSelection | str = OutcomeSelection.HOME
+        cls, match_id: str, selection: SelectionType = SelectionType.HOME
     ) -> PlaceBetRequest:
         """Valid bet at the maximum allowed stake."""
         return cls.for_outcome(selection, match_id, cls.MAX_STAKE)
@@ -48,13 +45,11 @@ class BetMother:
     def with_illegal_stake(
         cls,
         match_id: str,
-        stake: float,
-        selection: OutcomeSelection | str = OutcomeSelection.HOME,
+        stake: Decimal,
+        selection: SelectionType = SelectionType.HOME,
     ) -> PlaceBetRequest:
         """
         Bet whose stake breaks a business rule (overdraft, negative, precision, bounds).
         Built without validation; the caller names the stake so the test states the rule.
         """
-        return PlaceBetRequest.model_construct(
-            match_id=match_id, selection=OutcomeSelection(selection), stake=stake
-        )
+        return PlaceBetRequest.model_construct(match_id=match_id, selection=selection, stake=stake)

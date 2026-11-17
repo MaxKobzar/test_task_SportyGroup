@@ -1,18 +1,27 @@
 """
-Domain-specific API Exception hierarchy for REST client operations.
+Typed API exception hierarchy.
 
-Implements Production SDK Standard: non-2xx responses raise typed exceptions
-that encapsulate status codes, raw responses, and parsed Pydantic error models.
-Follows DRY and KISS principles with a single unified constructor.
+Every non-2xx response raises the ApiException subclass mapped to its status code, with its
+error body validated against that status's model from framework.api.models
+(Error400, Error401, Error405, Error409, Error422, Error500).
+
+A documented status whose body breaks its model (missing or empty field, wrong type,
+undocumented field, code or message, non-JSON body) raises ApiContractViolationError. So does a 2xx
+body that breaks its response model (see ApiContractViolationError.parse, used by the client).
+Undocumented statuses (e.g. a 502 from a proxy) raise ApiHttpError with no body contract.
+
+Exceptions are plain data holders: the from_response factory does all parsing, so an
+exception can never be created half-initialised.
 """
 
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, Dict, Optional, Type, Union
+from typing import ClassVar, ParamSpec, TypeVar
 
 import requests
 from pydantic import BaseModel, ValidationError
 
-from framework.api.models import (
+from framework.api.models.errors import (
     AuthError,
     Error,
     Error400,
@@ -23,199 +32,148 @@ from framework.api.models import (
     Error500,
 )
 
+P = ParamSpec("P")
+TModel = TypeVar("TModel", bound=BaseModel)
+
+ErrorBody = Error | AuthError
+
+
+class ApiContractViolationError(Exception):
+    """A response body breaks its documented model: a product defect, not a client error."""
+
+    def __init__(self, response: requests.Response, cause: ValidationError):
+        self.response = response
+        self.status_code = response.status_code
+        self.validation_error = cause
+        request = response.request
+        violations = "; ".join(
+            f"{'.'.join(map(str, err['loc'])) or '<body>'}={err.get('input')!r}: {err['msg']}"
+            for err in cause.errors()
+        )
+        super().__init__(
+            f"{request.method} {request.path_url} [{self.status_code}] broke the "
+            f"{cause.title} contract: {violations}"
+        )
+
+    @staticmethod
+    def parse(model: type[TModel], data: object, response: requests.Response) -> TModel:
+        """Validate decoded data against model; a violation raises ApiContractViolationError."""
+        try:
+            return model.model_validate(data)
+        except ValidationError as error:
+            raise ApiContractViolationError(response, error) from error
+
+    @staticmethod
+    def parse_json(model: type[TModel], response: requests.Response) -> TModel:
+        """Validate the raw JSON body against model; invalid JSON is a violation too."""
+        try:
+            return model.model_validate_json(response.content)
+        except ValidationError as error:
+            raise ApiContractViolationError(response, error) from error
+
 
 class ApiException(Exception):
-    """Base exception for all API client errors with a unified constructor."""
+    """Base exception for non-2xx API responses. Build it with from_response."""
 
-    title: str = "Unexpected Error"
-    default_code: Optional[str] = None
-    model_cls: Optional[Type[BaseModel]] = None
-    strict_model_cls: Optional[Type[BaseModel]] = None
+    title: ClassVar[str] = "Unexpected Error"
+    error_model: ClassVar[type[ErrorBody] | None] = None
 
-    def __init__(
-        self,
-        status_code: Union[int, str, requests.Response],
-        response: Optional[Union[requests.Response, int]] = None,
-        message: Optional[Union[requests.Response, str]] = None,
-    ):
-        # Resolve polymorphic arguments: (status_code, response), (response), or legacy (message, status_code, response)
-        if isinstance(status_code, str):
-            custom_msg: Optional[str] = status_code
-            status = (
-                int(response)
-                if isinstance(response, (int, float))
-                else getattr(message, "status_code", 0)
-            )
-            resp = message if not isinstance(message, str) else None
-        elif isinstance(status_code, (int, float)):
-            status = int(status_code)
-            resp = response if not isinstance(response, (int, float)) else None
-            custom_msg = message if isinstance(message, str) else None
-        else:
-            resp = status_code
-            status = getattr(resp, "status_code", 0)
-            custom_msg = message if isinstance(message, str) else None
+    def __init__(self, response: requests.Response, error: ErrorBody | None = None):
+        self.response = response
+        self.status_code = response.status_code
+        self.error = error
+        super().__init__(f"HTTP {self.status_code} {self.title}: {self._detail()}")
 
-        self.status_code: int = status
-        self.response: Optional[requests.Response] = resp
-
-        # Parse JSON payload safely
-        raw_text = getattr(resp, "text", "") or ""
-        json_data = None
-        if resp is not None and hasattr(resp, "json") and callable(resp.json):
-            try:
-                json_data = resp.json()
-            except (ValueError, TypeError):
-                json_data = None
-
-        # Validate domain error model or fall back to default error representation
-        parsed_model = None
-        if self.model_cls and json_data is not None:
-            try:
-                parsed_model = self.model_cls.model_validate(json_data)
-            except (ValidationError, TypeError, ValueError):
-                parsed_model = None
-
-        if parsed_model is not None:
-            err_code = getattr(parsed_model, "error", "")
-            err_msg = getattr(parsed_model, "message", None)
-            detail = f"[{err_code}] {err_msg}" if err_msg else f"[{err_code}]"
-            default_msg = f"HTTP {status} {self.title}: {detail}"
-        else:
-            default_msg = f"HTTP {status} {self.title}: {raw_text}"
-            if self.model_cls is not None:
-                if self.model_cls is AuthError:
-                    parsed_model = AuthError(error="missing_user_id")
-                else:
-                    parsed_model = Error(
-                        error=self.default_code or "malformed_error_response",
-                        message=raw_text,
-                    )
-
-        self.error: Optional[Error] = None
-        self.auth_error: Optional[AuthError] = None
-
-        if isinstance(parsed_model, AuthError):
-            self.auth_error = parsed_model
-        elif isinstance(parsed_model, Error):
-            self.error = parsed_model
-
-        # Validate strict OpenAPI example model if configured
-        self.strict_model: Optional[BaseModel] = None
-        if self.strict_model_cls and json_data is not None:
-            try:
-                self.strict_model = self.strict_model_cls.model_validate(json_data)
-            except ValidationError:
-                self.strict_model = None
-
-        final_msg = custom_msg or default_msg
-        super().__init__(final_msg)
-        self.message = final_msg
+    def _detail(self) -> str:
+        if isinstance(self.error, Error) and self.error.message:
+            return f"[{self.error.error}] {self.error.message}"
+        if self.error is not None:
+            return f"[{self.error.error}]"
+        return self.response.text
 
     @classmethod
     def from_response(cls, response: requests.Response) -> "ApiException":
-        """Factory constructor to instantiate the matching typed exception for an HTTP response."""
-        if cls is not ApiException:
-            return cls(response.status_code, response)
+        """
+        Typed exception for a non-2xx response, with its error body validated.
 
-        status_exception_map: Dict[int, Type[ApiException]] = {
+        Raises ApiContractViolationError when a documented status returns a body that
+        breaks its schema model.
+        """
+        _status_exceptions: dict[int, type[ApiException]] = {
             400: ApiBadRequestError,
             401: ApiAuthError,
             405: ApiMethodNotAllowedError,
             409: ApiConflictError,
             422: ApiUnprocessableEntityError,
+            500: ApiInternalServerError,
         }
-
-        status = response.status_code
-        if status >= 500:
-            return ApiInternalServerError(status, response)
-        error_cls = status_exception_map.get(status, ApiHttpError)
-        return error_cls(status, response)
+        exception_cls = _status_exceptions.get(response.status_code, ApiHttpError)
+        if exception_cls.error_model is None:
+            return exception_cls(response)
+        error = ApiContractViolationError.parse_json(exception_cls.error_model, response)
+        return exception_cls(response, error)
 
 
 class ApiValidationError(ApiException):
-    """
-    Raised when the server returns 400 (Bad Request) or 422 (Unprocessable Entity).
-    Encapsulates the parsed OpenAPI Error model.
-    """
+    """400 / 422: the request was rejected by validation."""
 
     title = "Validation Error"
-    default_code = "malformed_error_response"
-    model_cls = Error
 
 
 class ApiBadRequestError(ApiValidationError):
-    """Raised when server returns 400 (Bad Request)."""
+    """400 Bad Request: malformed or non-object JSON payload."""
 
-    strict_model_cls = Error400
-
-
-class ApiAuthError(ApiException):
-    """
-    Raised when the server returns 401 (Unauthorized).
-    Encapsulates the parsed OpenAPI AuthError model.
-    """
-
-    title = "Auth Error"
-    default_code = "missing_user_id"
-    model_cls = AuthError
-    strict_model_cls = Error401
-
-
-class ApiMethodNotAllowedError(ApiException):
-    """Raised when server returns 405 (Method Not Allowed)."""
-
-    title = "Method Not Allowed"
-    default_code = "method_not_allowed"
-    model_cls = Error
-    strict_model_cls = Error405
-
-
-class ApiConflictError(ApiException):
-    """Raised when server returns 409 (Conflict - Bet already in progress)."""
-
-    title = "Conflict"
-    default_code = "conflict"
-    model_cls = Error
-    strict_model_cls = Error409
+    error_model = Error400
 
 
 class ApiUnprocessableEntityError(ApiValidationError):
-    """Raised when server returns 422 (Unprocessable Entity)."""
+    """422 Unprocessable Entity: semantic validation failure (selection, stake, match)."""
 
-    strict_model_cls = Error422
+    error_model = Error422
+
+
+class ApiAuthError(ApiException):
+    """401 Unauthorized: missing or invalid x-user-id."""
+
+    title = "Auth Error"
+    error_model = Error401
+
+
+class ApiMethodNotAllowedError(ApiException):
+    """405: the test suite expects this status for insufficient balance."""
+
+    title = "Method Not Allowed"
+    error_model = Error405
+
+
+class ApiConflictError(ApiException):
+    """409 Conflict: a bet is already being processed for this user."""
+
+    title = "Conflict"
+    error_model = Error409
 
 
 class ApiInternalServerError(ApiException):
-    """Raised when server returns 500 (Internal Server Error)."""
+    """500 Internal Server Error (documented, so its body must match the Error schema)."""
 
     title = "Internal Server Error"
-    default_code = "internal_server_error"
-    model_cls = Error
-    strict_model_cls = Error500
+    error_model = Error500
 
 
 class ApiHttpError(ApiException):
-    """Raised for unexpected 4xx or 5xx server errors without domain error models."""
-
-    title = "Unexpected Error"
+    """Any undocumented non-2xx status (e.g. a 502 from a proxy): no body contract."""
 
 
-def validate_rest_error(target: Any = None) -> Any:
-    """Decorator or validator raising ApiException on non-2xx responses."""
+def raise_for_api_error(
+    send: Callable[P, requests.Response],
+) -> Callable[P, requests.Response]:
+    """Decorator: raise the typed ApiException for any non-2xx response."""
 
-    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(fn)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            resp = fn(*args, **kwargs)
-            if hasattr(resp, "status_code") and not (200 <= resp.status_code < 300):
-                raise ApiException.from_response(resp)
-            return resp
+    @wraps(send)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> requests.Response:
+        response = send(*args, **kwargs)
+        if not 200 <= response.status_code < 300:
+            raise ApiException.from_response(response)
+        return response
 
-        return wrapper
-
-    if hasattr(target, "status_code"):
-        if not (200 <= target.status_code < 300):
-            raise ApiException.from_response(target)
-        return target
-    return decorator(target) if callable(target) else decorator
+    return wrapper

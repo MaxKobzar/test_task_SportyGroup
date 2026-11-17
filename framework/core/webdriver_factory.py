@@ -1,63 +1,43 @@
 """
 WebDriver Factory module.
-Creates and configures Selenium WebDriver instances according to runtime configuration.
+Creates and configures Selenium WebDriver instances from the session Settings.
 """
 
-from typing import Any, Optional
+import logging
 
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.remote.webdriver import WebDriver
 
-from framework.core.logger import get_logger
+from framework.config.settings import Settings
 
-logger = get_logger()
+logger = logging.getLogger(__name__)
+
+PAGE_LOAD_TIMEOUT_FACTOR = 3  # full page loads get more headroom than element waits
 
 
 class WebDriverFactory:
     """Factory for creating configured WebDriver instances."""
 
     @staticmethod
-    def create_driver(
-        config: Optional[Any] = None,
-        browser: str = "chrome",
-        headless: bool = False,
-        browser_width: int = 1440,
-        browser_height: int = 900,
-        timeout: int = 10,
-        **kwargs,
-    ) -> webdriver.Remote:
-        """Create and return a configured WebDriver instance based on parsed options."""
-        # Support passing a config object or direct keyword parameters
-        if config is not None:
-            browser = getattr(config, "browser", browser)
-            headless = getattr(config, "headless", headless)
-            browser_width = getattr(config, "browser_width", browser_width)
-            browser_height = getattr(config, "browser_height", browser_height)
-            timeout = getattr(config, "timeout", timeout)
+    def create_driver(settings: Settings) -> WebDriver:
+        """Create a WebDriver for settings.browser; Selenium Manager resolves the driver binary."""
+        browser = settings.browser.lower()
+        logger.info("Starting %s (headless=%s)", browser, settings.headless)
 
-        browser_name = str(browser).lower()
-        logger.info(f"Initializing WebDriver for browser: {browser_name} (headless={headless})")
+        if browser != "chrome":
+            raise ValueError(f"Unsupported browser {browser!r}: only 'chrome' is configured.")
 
-        if browser_name == "chrome":
-            options = ChromeOptions()
-            if headless:
-                options.add_argument("--headless=new")
+        options = webdriver.ChromeOptions()
+        options.add_argument(f"--window-size={settings.browser_width},{settings.browser_height}")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-notifications")
+        if settings.headless:
+            options.add_argument("--headless=new")
+            # Container/CI-only flags: shared memory is small and there is no user namespace.
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-            options.add_argument(f"--window-size={browser_width},{browser_height}")
-            options.add_argument("--disable-extensions")
-            options.add_argument("--disable-notifications")
-            options.add_argument("--remote-allow-origins=*")
 
-            # Selenium 4.x native Selenium Manager automatically resolves matching driver
-            service = ChromeService()
-            driver = webdriver.Chrome(service=service, options=options)
-            driver.set_page_load_timeout(timeout * 3)
-            driver.implicitly_wait(0)  # Favor explicit waits throughout the framework
-            return driver
-
-        raise ValueError(
-            f"Unsupported browser: {browser_name}. Only 'chrome' is currently configured."
-        )
+        driver = webdriver.Chrome(options=options)
+        driver.set_page_load_timeout(settings.timeout * PAGE_LOAD_TIMEOUT_FACTOR)
+        driver.implicitly_wait(0)  # explicit waits only; mixing both makes timeouts unpredictable
+        return driver

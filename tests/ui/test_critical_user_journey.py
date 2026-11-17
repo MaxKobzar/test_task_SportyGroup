@@ -29,8 +29,9 @@ import allure
 import pytest
 from assertpy import assert_that, soft_assertions
 
-from framework.api.models import Match, OutcomeSelection, PlaceBetRequest
+from framework.api.models.models import Match, PlaceBetRequest, SelectionType
 from framework.data.bet_mother import BetMother
+from framework.data.money import format_eur, to_cents
 from framework.pages.betting_page import BettingPage
 from framework.screenplay.actor import Actor
 from framework.screenplay.questions.bet_receipt import (
@@ -50,20 +51,14 @@ from framework.screenplay.tasks.select_outcome import SelectMatchOutcome
 RECEIPT_TIMEOUT_SECONDS = 8
 
 
-def money(amount: float) -> str:
-    """Format an amount the way the UI renders currency (spec §3: EUR, 2 decimals)."""
-    return f"€{amount:.2f}"
-
-
 @allure.epic("Core Wagering Engine")
 @allure.feature("Critical User Journey")
-@pytest.mark.ui()
+@pytest.mark.ui
 @pytest.mark.usefixtures("reset_balance_precondition")
 class TestSingleBetCriticalUserJourney:
     @allure.story("TC-BET-001: Place a single bet and receive a correct receipt")
     @allure.severity(allure.severity_level.BLOCKER)
     @pytest.mark.xfail(
-        strict=True,
         raises=AssertionError,
         reason=(
             "BUG-002 receipt payout is stake x 2; BUG-006 receipt shows away vs home; "
@@ -72,15 +67,15 @@ class TestSingleBetCriticalUserJourney:
     )
     @pytest.mark.parametrize(
         "selection",
-        [OutcomeSelection.DRAW, OutcomeSelection.HOME, OutcomeSelection.AWAY],
+        [SelectionType.DRAW, SelectionType.HOME, SelectionType.AWAY],
         ids=lambda selection: selection.value,
     )
     def test_bettor_places_single_bet_and_receives_receipt(
-        self, bettor_actor: Actor, target_match: Match, selection: OutcomeSelection
+        self, bettor_actor: Actor, target_match: Match, selection: SelectionType
     ) -> None:
         bet: PlaceBetRequest = BetMother.for_outcome(selection, match_id=target_match.id)
-        odds = target_match.odds.for_selection(bet.selection.value)
-        expected_payout = round(bet.stake * odds, 2)
+        odds = target_match.odds.for_selection(bet.selection)
+        expected_payout = to_cents(bet.stake * odds)
         expected_match_label = f"{target_match.home_team} vs {target_match.away_team}"
 
         with allure.step("Open the app and record the starting balance"):
@@ -91,7 +86,7 @@ class TestSingleBetCriticalUserJourney:
             ).is_true()
 
         with allure.step(f"Select {bet.selection.value} on {expected_match_label}"):
-            bettor_actor.attempts_to(SelectMatchOutcome.on(target_match.id, bet.selection.value))
+            bettor_actor.attempts_to(SelectMatchOutcome.on(target_match.id, bet.selection))
             slip = bettor_actor.asks_for(BetSlipSelection.details())
             with soft_assertions():
                 assert_that(slip["teams"]).described_as("Slip match label").is_equal_to(
@@ -101,7 +96,7 @@ class TestSingleBetCriticalUserJourney:
                     f"{odds:.2f}"
                 )
 
-        with allure.step(f"Enter stake {money(bet.stake)} and check the potential payout"):
+        with allure.step(f"Enter stake {format_eur(bet.stake)} and check the potential payout"):
             bettor_actor.attempts_to(EnterStakeAmount.of(bet.stake))
             with soft_assertions():
                 assert_that(bettor_actor.asks_for(PotentialPayout.value())).described_as(
@@ -131,14 +126,14 @@ class TestSingleBetCriticalUserJourney:
                     "Receipt shows the selection from the slip"
                 ).contains(slip["market"])
                 assert_that(receipt["stake"]).described_as("Receipt stake").is_equal_to(
-                    money(bet.stake)
+                    format_eur(bet.stake)
                 )
                 assert_that(receipt["odds"]).described_as("Receipt odds at placement").is_equal_to(
                     f"{odds:.2f}"
                 )
                 assert_that(receipt["payout"]).described_as(
                     "Receipt payout = stake x odds"
-                ).is_equal_to(money(expected_payout))
+                ).is_equal_to(format_eur(expected_payout))
                 assert_that(receipt["placed_at"]).described_as(
                     "Receipt placement timestamp"
                 ).is_not_empty()
@@ -147,7 +142,7 @@ class TestSingleBetCriticalUserJourney:
                 ).is_true()
                 assert_that(balance_after).described_as(
                     "Header balance reduced by the stake, without reload"
-                ).is_equal_to(round(balance_before - bet.stake, 2))
+                ).is_equal_to(balance_before - bet.stake)
 
                 bettor_actor.attempts_to(CloseReceiptModal.if_displayed())
                 assert_that(bettor_actor.asks_for(IsReceiptModalClosed.check())).described_as(

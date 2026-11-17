@@ -2,25 +2,23 @@
 Screenplay Task: SelectMatchOutcome.
 """
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-
+from framework.api.models.models import SelectionType
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
+from framework.screenplay.actor import Actor
 
 
 class SelectMatchOutcome:
-    """Task to select an outcome (HOME/DRAW/AWAY) on the match with the given catalog ID."""
+    """Task to add an outcome (HOME/DRAW/AWAY) of a catalog match to the bet slip."""
 
-    def __init__(self, match_id: str, outcome: str):
+    def __init__(self, match_id: str, selection: SelectionType):
         self.match_id = match_id
-        self.outcome = outcome
+        self.selection = selection
 
     @classmethod
-    def on(cls, match_id: str, outcome: str) -> "SelectMatchOutcome":
-        return cls(match_id=match_id, outcome=outcome)
+    def on(cls, match_id: str, selection: SelectionType) -> "SelectMatchOutcome":
+        return cls(match_id=match_id, selection=selection)
 
-    def perform_as(self, actor) -> None:
-        browser = actor.ability_to(BrowseTheWeb)
-        page = browser.on_betting_page()
-        page.click((By.ID, f"odds-{self.match_id}-{self.outcome.lower()}"))
-        page.wait.until(EC.visibility_of_element_located(page.LOC_STAKE_INPUT))
+    def perform_as(self, actor: Actor) -> None:
+        actor.ability_to(BrowseTheWeb).on_betting_page().select_outcome(
+            self.match_id, self.selection
+        )

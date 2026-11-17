@@ -14,4 +14,5 @@ class CallAPI:
 
     @classmethod
     def with_client(cls, client: BettingApiClient) -> "CallAPI":
+        """Create the ability around an API client."""
         return cls(client=client)

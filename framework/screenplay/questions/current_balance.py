@@ -2,17 +2,18 @@
 Screenplay Question: DisplayedBalance.
 """
 
+from decimal import Decimal
+
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
+from framework.screenplay.actor import Actor
 
 
 class DisplayedBalance:
-    """Question inspecting the UI header balance."""
+    """The balance shown in the UI header."""
 
     @classmethod
     def value(cls) -> "DisplayedBalance":
         return cls()
 
-    def answered_by(self, actor) -> float:
-        browser = actor.ability_to(BrowseTheWeb)
-        page = browser.on_betting_page()
-        return page.get_current_balance()
+    def answered_by(self, actor: Actor) -> Decimal:
+        return actor.ability_to(BrowseTheWeb).on_betting_page().get_current_balance()
