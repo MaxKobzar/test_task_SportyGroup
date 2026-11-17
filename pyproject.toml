@@ -2,7 +2,7 @@
 name = "sporty-qa-framework"
 version = "0.1.0"
 description = "Hybrid UI (Selenium + Screenplay & POM) and API Test Automation Framework"
-authors = [{ name = "QA Automation Engineer", email = "qa@example.com" }]
+authors = [{ name = "Maksym Kobzar", email = "maxkobzar1@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [

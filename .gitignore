@@ -19,3 +19,10 @@ allure-report/
 .idea/
 .vscode/
 .DS_Store
+
+# AI tooling, agent workspaces and private source material (local only)
+_bmad/
+_bmad-output/
+.agents/
+.claude/
+materials/

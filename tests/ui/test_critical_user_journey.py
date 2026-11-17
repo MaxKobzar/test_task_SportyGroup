@@ -29,24 +29,27 @@ import allure
 import pytest
 from assertpy import assert_that, soft_assertions
 
-from framework.api.models.models import Match, PlaceBetRequest, SelectionType
-from framework.data.bet_mother import BetMother
-from framework.data.money import format_eur, to_cents
-from framework.pages.betting_page import BettingPage
-from framework.screenplay.actor import Actor
-from framework.screenplay.questions.bet_receipt import (
+from framework.api import Match, PlaceBetRequest, SelectionType
+from framework.data import BetMother, format_eur, to_cents
+from framework.pages import BettingPage
+from framework.screenplay import Actor
+from framework.screenplay.questions import (
+    BetSlipSelection,
+    DisplayedBalance,
+    IsBetSlipEmpty,
+    IsPlaceBetEnabled,
     IsReceiptModalClosed,
     IsReceiptModalDisplayed,
+    PotentialPayout,
     ReceiptDetails,
 )
-from framework.screenplay.questions.bet_slip_status import BetSlipSelection, IsBetSlipEmpty
-from framework.screenplay.questions.current_balance import DisplayedBalance
-from framework.screenplay.questions.error_message import IsPlaceBetEnabled
-from framework.screenplay.questions.potential_payout import PotentialPayout
-from framework.screenplay.tasks.close_receipt import CloseReceiptModal
-from framework.screenplay.tasks.navigate_to_app import NavigateToApp
-from framework.screenplay.tasks.place_bet import EnterStakeAmount, SubmitBetPlacement
-from framework.screenplay.tasks.select_outcome import SelectMatchOutcome
+from framework.screenplay.tasks import (
+    CloseReceiptModal,
+    EnterStakeAmount,
+    NavigateToApp,
+    SelectMatchOutcome,
+    SubmitBetPlacement,
+)
 
 RECEIPT_TIMEOUT_SECONDS = 8
 

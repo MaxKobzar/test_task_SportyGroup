@@ -13,7 +13,7 @@ Every other archetype delegates to one of them.
 
 from decimal import Decimal
 
-from framework.api.models.models import PlaceBetRequest, SelectionType
+from framework.api.models.betting import PlaceBetRequest, SelectionType
 
 
 class BetMother:

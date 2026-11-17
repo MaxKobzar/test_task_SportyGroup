@@ -8,20 +8,17 @@ scoped under the nearest id so a style change elsewhere cannot match it.
 """
 
 import logging
-import re
 from decimal import Decimal
 from typing import TypedDict
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 
-from framework.api.models.models import SelectionType
-from framework.data.money import parse_amount
+from framework.api.models.betting import SelectionType
+from framework.data.money import contains_eur_amount, find_number, parse_amount
 from framework.pages.base_page import BasePage, Locator
 
 logger = logging.getLogger(__name__)
-
-AMOUNT_PATTERN = re.compile(r"€\s*[-+]?\d")
 
 
 class SlipSelection(TypedDict):
@@ -88,7 +85,7 @@ class BettingPage(BasePage):
         wait = self._wait()
         wait.until(EC.presence_of_element_located(self.MATCH_CARDS))
         wait.until(
-            lambda driver: AMOUNT_PATTERN.search(driver.find_element(*self.HEADER_BALANCE).text)
+            lambda driver: contains_eur_amount(driver.find_element(*self.HEADER_BALANCE).text)
         )
 
     # --- Header -----------------------------------------------------------------------
@@ -107,11 +104,10 @@ class BettingPage(BasePage):
     def get_selection_details(self) -> SlipSelection:
         """Teams, market label and odds of the active slip selection."""
         odds_text = self.get_text(self.SELECTION_ODDS)  # e.g. "Odds: 2.45"
-        odds_match = re.search(r"\d+(?:\.\d+)?", odds_text)
         return SlipSelection(
             teams=self.get_text(self.SELECTION_TEAMS),
             market=self.get_text(self.SELECTION_MARKET),
-            odds=odds_match.group() if odds_match else odds_text,
+            odds=find_number(odds_text) or odds_text,
         )
 
     def enter_stake(self, amount: Decimal) -> None:

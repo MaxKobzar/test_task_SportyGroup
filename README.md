@@ -19,45 +19,53 @@ sporty_group/
 ├── pytest.ini                         # Pytest options, strict markers, logging format, markers
 ├── README.md                          # Framework documentation
 ├── conftest.py                        # Root: pytest_addoption, settings/api_client fixtures, triage hook
-├── framework/
+├── framework/                         # Every package exposes its public API in __init__.py (__all__)
 │   ├── config/
-│   │   └── settings.py                # Strongly-typed Settings built from CLI options (.env defaults)
+│   │   └── settings.py                # Settings: strongly-typed config built from CLI options (.env defaults)
 │   ├── core/
-│   │   └── webdriver_factory.py       # Factory producing configured Chrome WebDriver
+│   │   └── webdriver_factory.py       # WebDriverFactory: configured Chrome WebDriver
 │   ├── api/
-│   │   ├── client.py                  # REST API client (session, timeouts, Allure telemetry)
-│   │   ├── exceptions.py              # Typed exceptions mapped from HTTP status codes
-│   │   └── models.py                  # Pydantic V2 contract models (Decimal money)
+│   │   ├── client.py                  # BaseClient, BettingApiClient (session, timeouts, Allure telemetry)
+│   │   ├── exceptions.py              # Typed exceptions per HTTP status, parse_model / parse_json_model
+│   │   └── models/
+│   │       ├── betting.py             # Pydantic V2 domain models: Match, Odds, Balance, PlaceBet* (Decimal money)
+│   │       └── errors.py              # Error body models per documented status (Error400 … Error500)
 │   ├── pages/                         # Page Object Model (POM)
-│   │   ├── base_page.py               # Base Page with explicit waits, locators, safe actions
-│   │   ├── betting_page.py            # Betting Dashboard & Slip Page Object
-│   │   └── page_factory.py            # Page Factory implementing Factory Method pattern
+│   │   ├── base_page.py               # BasePage: explicit waits, locators, safe actions
+│   │   ├── betting_page.py            # BettingPage: dashboard, bet slip and receipt modal
+│   │   └── page_factory.py            # PageFactory: Factory Method for Page Objects
 │   ├── data/
-│   │   ├── bet_mother.py              # Object Mother: valid and illegal-stake PlaceBetRequest data
-│   │   └── money.py                   # Decimal money: half-up rounding, EUR formatting, parsing
-│   └── screenplay/                    # Screenplay Pattern
-│       ├── actor.py                   # Screenplay Actor (named, can, attempts_to, asks_for)
+│   │   ├── bet_mother.py              # BetMother: valid and illegal-stake PlaceBetRequest data
+│   │   └── money.py                   # Decimal money: rounding, EUR formatting, the only UI number parsing
+│   └── screenplay/                    # Screenplay Pattern (one class per module, file named after it)
+│       ├── actor.py                   # Actor and the Task / Question protocols
 │       ├── abilities/
-│       │   ├── browse_the_web.py      # Ability: BrowseTheWeb (wraps WebDriver & PageFactory)
-│       │   └── call_api.py            # Ability: CallAPI (wraps BettingApiClient)
+│       │   ├── browse_the_web.py      # BrowseTheWeb (wraps WebDriver & PageFactory)
+│       │   └── call_api.py            # CallAPI (wraps BettingApiClient)
 │       ├── tasks/                     # Composable business actions
 │       │   ├── navigate_to_app.py     # NavigateToApp
-│       │   ├── select_outcome.py      # SelectMatchOutcome (by catalog match id)
-│       │   ├── place_bet.py           # EnterStakeAmount & SubmitBetPlacement
-│       │   ├── place_bet_api.py       # PlaceBetViaApi
-│       │   ├── close_receipt.py       # CloseReceiptModal
+│       │   ├── select_match_outcome.py # SelectMatchOutcome (by catalog match id)
+│       │   ├── enter_stake_amount.py  # EnterStakeAmount
+│       │   ├── submit_bet_placement.py # SubmitBetPlacement
+│       │   ├── close_receipt_modal.py # CloseReceiptModal
 │       │   ├── refresh_page.py        # RefreshPage
-│       │   └── reset_balance.py       # ResetBalanceViaApi
+│       │   ├── place_bet_via_api.py   # PlaceBetViaApi
+│       │   └── reset_balance_via_api.py # ResetBalanceViaApi
 │       └── questions/                 # State inquiry objects
-│           ├── current_balance.py     # DisplayedBalance
+│           ├── displayed_balance.py   # DisplayedBalance
 │           ├── potential_payout.py    # PotentialPayout
-│           ├── error_message.py       # IsPlaceBetEnabled & InlineErrorMessage
-│           ├── bet_receipt.py         # IsReceiptModalDisplayed
-│           ├── bet_slip_status.py     # IsBetSlipEmpty & BetSlipSelection
+│           ├── is_place_bet_enabled.py # IsPlaceBetEnabled
+│           ├── inline_error_message.py # InlineErrorMessage
+│           ├── is_bet_slip_empty.py   # IsBetSlipEmpty
+│           ├── bet_slip_selection.py  # BetSlipSelection
+│           ├── is_receipt_modal_displayed.py # IsReceiptModalDisplayed
+│           ├── is_receipt_modal_closed.py # IsReceiptModalClosed
+│           ├── receipt_details.py     # ReceiptDetails
 │           ├── api_balance.py         # ApiBalance
-│           └── api_matches.py         # ApiMatches
+│           └── api_matches_feed.py    # ApiMatchesFeed
+├── test-plans/                        # Risk-based test plan, bug reports and evidence screenshots
 └── tests/
-    ├── conftest.py                    # Shared test suite fixtures (lifecycle logging, reset_balance_precondition)
+    ├── conftest.py                    # Shared fixtures: reset_balance_precondition, target_match
     ├── ui/
     │   ├── conftest.py                # UI fixtures (driver, bettor_actor Screenplay Actor)
     │   └── test_critical_user_journey.py # TC-BET-001: single-bet journey and receipt (E2E)
@@ -92,6 +100,7 @@ sporty_group/
   ```
 - **Abilities**: `BrowseTheWeb` (driver, app URL and timeout from `Settings`) and `CallAPI` bridge the Actor to the browser and REST endpoints.
 - **Tasks & Questions**: Decouple intent ("what the user does") from technical implementation. They are typed through the `Task` / `Question[T]` protocols and never touch locators.
+- **Imports**: tests import from package level (`from framework.screenplay.tasks import NavigateToApp`); modules inside `framework/` import concrete modules so the packages can never import each other in a cycle.
 
 ### Money and API contracts
 - Money is `Decimal` end to end: responses are parsed with `parse_float=Decimal`, expected values round half-up to cents (`framework/data/money.py`).
@@ -118,6 +127,27 @@ When a test fails in setup or in its body (including expected failures), the hoo
 1. **Browser Screenshot** (PNG) captured directly from the active WebDriver session.
 2. **Page Source** (HTML) of the exact DOM state at failure time.
 3. **Execution Traceback Log** containing the failure traceback.
+
+---
+
+## 🧰 Tooling Choices
+
+Each tool was picked for one job and earns its place by removing a class of failure.
+
+| Tool | Role | Why this one | Instead of |
+|---|---|---|---|
+| **uv** | Python install, dependency resolution, lock file, virtualenv | One fast binary replaces pyenv + pip + Poetry; `uv.lock` is cross-platform, so CI and every laptop resolve the exact same versions; `uv run` syncs the env before each command, so a stale venv can't cause a false failure. | Poetry (slower resolver, separate Python management) |
+| **pytest** | Test runner and fixture system | Fixture hierarchy (`conftest.py` per layer) drives the preconditions; `pytest_addoption` and `pytest_runtest_makereport` give the CLI input and failure triage; parametrize + strict `xfail` keep known bugs visible. | unittest (no fixture scopes, class boilerplate) |
+| **Selenium WebDriver** | Browser automation | Required stack. Selenium Manager resolves the matching chromedriver automatically, so there is no driver binary to maintain. | — |
+| **requests** | HTTP client | Required stack. A `Session` gives connection reuse, default headers and a response hook that logs every call to Allure. | — |
+| **Pydantic v2** | API contract models | Validates every response against the OpenAPI schema and the business rules (stake limits, balance ≥ 0) in one place; `Decimal` money end to end; a broken contract fails with the field, value and rule. | Hand-written dict assertions |
+| **assertpy** | Assertions | Readable fluent checks with `described_as(...)` messages, and `soft_assertions()` to report every receipt defect from one UI run instead of stopping at the first. | Bare `assert` (one failure per run, no context) |
+| **Allure** | Reporting | Step tree mirrors the Screenplay narrative (Actor → Task/Question → HTTP call); failures carry the screenshot, page source and traceback; epics/features/severity map to the test plan. | pytest-html (flat, no steps or attachments per step) |
+| **python-dotenv** | Local configuration | `.env` supplies defaults for the CLI options only, so secrets like `USER_ID` stay out of git and the CLI always wins. | Hardcoded config module |
+| **Ruff** | Linting + formatting | One fast tool replaces flake8, isort, pyupgrade and black; rule set includes pytest-style, bugbear and blind-except checks. | flake8 + isort + black |
+| **mypy** | Static typing | `disallow_untyped_defs` on `framework/` keeps the library contract explicit (generic `Question[T]`, typed page factory). | — |
+| **pre-commit** | Local quality gate | Runs ruff, mypy, a pytest collection check and repo guardrails (no `except Exception`, no `.env`) before code leaves the laptop; CI runs the same hooks, so local and CI never disagree. | CI-only checks (slower feedback) |
+| **GitHub Actions** | CI | Lives next to the code; `concurrency` serializes runs because every run mutates the same remote test user's balance. | — |
 
 ---
 
@@ -160,7 +190,7 @@ uv run pytest tests/api/ -k "TC-BET-003"     # rows S3 and S9 only
 
 #### Known Bugs (strict xfail)
 Cases blocked by a confirmed defect are marked `xfail` (strict globally via `xfail_strict = true`) with the bug ID and the exact
-failure type the bug produces (`raises=`), so an unrelated error still fails the run (see `BUG_REPORTS.md`).
+failure type the bug produces (`raises=`), so an unrelated error still fails the run (see `test-plans/BUG_REPORTS.md`).
 A normal run shows them as `XFAIL`; once the bug is fixed the case turns `XPASS` and fails the run,
 so the marker must be removed. To see the real assertion failures:
 ```bash

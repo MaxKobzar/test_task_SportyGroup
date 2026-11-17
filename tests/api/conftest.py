@@ -8,13 +8,12 @@ from decimal import Decimal
 
 import pytest
 
-from framework.api.client import BettingApiClient
-from framework.api.models.models import Match, ResetBalanceResponse
-from framework.data.bet_mother import BetMother
-from framework.screenplay.abilities.call_api import CallAPI
-from framework.screenplay.actor import Actor
-from framework.screenplay.questions.api_balance import ApiBalance
-from framework.screenplay.tasks.place_bet_api import PlaceBetViaApi
+from framework.api import BettingApiClient, Match, ResetBalanceResponse
+from framework.data import BetMother
+from framework.screenplay import Actor
+from framework.screenplay.abilities import CallAPI
+from framework.screenplay.questions import ApiBalance
+from framework.screenplay.tasks import PlaceBetViaApi
 
 logger = logging.getLogger(__name__)
 

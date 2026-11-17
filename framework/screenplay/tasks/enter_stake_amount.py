@@ -1,5 +1,5 @@
 """
-Screenplay Tasks: EnterStakeAmount & SubmitBetPlacement.
+Screenplay Task: EnterStakeAmount.
 """
 
 from decimal import Decimal
@@ -20,14 +20,3 @@ class EnterStakeAmount:
 
     def perform_as(self, actor: Actor) -> None:
         actor.ability_to(BrowseTheWeb).on_betting_page().enter_stake(self.amount)
-
-
-class SubmitBetPlacement:
-    """Task to click Place Bet and wait for the placement to complete."""
-
-    @classmethod
-    def now(cls) -> "SubmitBetPlacement":
-        return cls()
-
-    def perform_as(self, actor: Actor) -> None:
-        actor.ability_to(BrowseTheWeb).on_betting_page().place_bet()

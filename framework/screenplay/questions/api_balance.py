@@ -2,7 +2,7 @@
 Screenplay Question: ApiBalance.
 """
 
-from framework.api.models.models import Balance
+from framework.api.models.betting import Balance
 from framework.screenplay.abilities.call_api import CallAPI
 from framework.screenplay.actor import Actor
 

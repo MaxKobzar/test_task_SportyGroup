@@ -12,8 +12,8 @@ from typing import Any
 import allure
 import requests
 
-from framework.api.exceptions import ApiContractViolationError, raise_for_api_error
-from framework.api.models.models import (
+from framework.api.exceptions import parse_model, raise_for_api_error
+from framework.api.models.betting import (
     Balance,
     Match,
     PlaceBetRequest,
@@ -103,12 +103,12 @@ class BettingApiClient(BaseClient):
     def get_balance(self) -> Balance:
         """GET /api/balance."""
         response = self.get("/api/balance")
-        return ApiContractViolationError.parse(Balance, _json(response), response)
+        return parse_model(Balance, _json(response), response)
 
     def get_matches(self) -> list[Match]:
         """GET /api/matches."""
         response = self.get("/api/matches")
-        return [ApiContractViolationError.parse(Match, m, response) for m in _json(response)]
+        return [parse_model(Match, m, response) for m in _json(response)]
 
     def place_bet(self, bet: PlaceBetRequest) -> PlaceBetResponse:
         """
@@ -123,10 +123,10 @@ class BettingApiClient(BaseClient):
             "stake": float(bet.stake),
         }
         response = self.post("/api/place-bet", json=body)
-        return ApiContractViolationError.parse(PlaceBetResponse, _json(response), response)
+        return parse_model(PlaceBetResponse, _json(response), response)
 
     def reset_balance(self) -> ResetBalanceResponse:
         """POST /api/reset-balance."""
         logger.info("Resetting balance for user-id %s", self.user_id)
         response = self.post("/api/reset-balance")
-        return ApiContractViolationError.parse(ResetBalanceResponse, _json(response), response)
+        return parse_model(ResetBalanceResponse, _json(response), response)

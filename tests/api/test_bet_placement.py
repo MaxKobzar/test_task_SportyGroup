@@ -14,15 +14,11 @@ import allure
 import pytest
 from assertpy import assert_that, soft_assertions
 
-from framework.api.exceptions import (
-    ApiException,
-    ApiUnprocessableEntityError,
-)
-from framework.api.models.models import Match
-from framework.data.bet_mother import BetMother
-from framework.screenplay.actor import Actor
-from framework.screenplay.questions.api_balance import ApiBalance
-from framework.screenplay.tasks.place_bet_api import PlaceBetViaApi
+from framework.api import ApiException, ApiUnprocessableEntityError, Match
+from framework.data import BetMother
+from framework.screenplay import Actor
+from framework.screenplay.questions import ApiBalance
+from framework.screenplay.tasks import PlaceBetViaApi
 
 # (stake derived from the drained balance, expected typed API exception, expected error code).
 # Status classes follow Spec §5.3: every illegal stake is a semantic validation failure (422).

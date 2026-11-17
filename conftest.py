@@ -15,8 +15,8 @@ from dotenv import load_dotenv
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.remote.webdriver import WebDriver
 
-from framework.api.client import BettingApiClient
-from framework.config.settings import Settings
+from framework.api import BettingApiClient
+from framework.config import Settings
 
 # .env only supplies defaults for the CLI options below; it is never read anywhere else.
 load_dotenv()

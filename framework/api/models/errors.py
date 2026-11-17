@@ -1,3 +1,11 @@
+"""
+Error body models of the Betting API, aligned with the OpenAPI spec at /api/docs.
+
+Error and AuthError mirror components/schemas; each ErrorNNN subclass pins the codes and
+messages documented for that HTTP status. framework.api.exceptions maps a status to its
+model, so an error body outside these literals is reported as a contract violation.
+"""
+
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field

@@ -7,7 +7,7 @@ error body validated against that status's model from framework.api.models
 
 A documented status whose body breaks its model (missing or empty field, wrong type,
 undocumented field, code or message, non-JSON body) raises ApiContractViolationError. So does a 2xx
-body that breaks its response model (see ApiContractViolationError.parse, used by the client).
+body that breaks its response model (see parse_model, used by the client).
 Undocumented statuses (e.g. a 502 from a proxy) raise ApiHttpError with no body contract.
 
 Exceptions are plain data holders: the from_response factory does all parsing, so an
@@ -55,21 +55,21 @@ class ApiContractViolationError(Exception):
             f"{cause.title} contract: {violations}"
         )
 
-    @staticmethod
-    def parse(model: type[TModel], data: object, response: requests.Response) -> TModel:
-        """Validate decoded data against model; a violation raises ApiContractViolationError."""
-        try:
-            return model.model_validate(data)
-        except ValidationError as error:
-            raise ApiContractViolationError(response, error) from error
 
-    @staticmethod
-    def parse_json(model: type[TModel], response: requests.Response) -> TModel:
-        """Validate the raw JSON body against model; invalid JSON is a violation too."""
-        try:
-            return model.model_validate_json(response.content)
-        except ValidationError as error:
-            raise ApiContractViolationError(response, error) from error
+def parse_model(model: type[TModel], data: object, response: requests.Response) -> TModel:
+    """Validate decoded data against model; a violation raises ApiContractViolationError."""
+    try:
+        return model.model_validate(data)
+    except ValidationError as error:
+        raise ApiContractViolationError(response, error) from error
+
+
+def parse_json_model(model: type[TModel], response: requests.Response) -> TModel:
+    """Validate the raw JSON body against model; invalid JSON is a violation too."""
+    try:
+        return model.model_validate_json(response.content)
+    except ValidationError as error:
+        raise ApiContractViolationError(response, error) from error
 
 
 class ApiException(Exception):
@@ -99,18 +99,10 @@ class ApiException(Exception):
         Raises ApiContractViolationError when a documented status returns a body that
         breaks its schema model.
         """
-        _status_exceptions: dict[int, type[ApiException]] = {
-            400: ApiBadRequestError,
-            401: ApiAuthError,
-            405: ApiMethodNotAllowedError,
-            409: ApiConflictError,
-            422: ApiUnprocessableEntityError,
-            500: ApiInternalServerError,
-        }
-        exception_cls = _status_exceptions.get(response.status_code, ApiHttpError)
+        exception_cls = _STATUS_EXCEPTIONS.get(response.status_code, ApiHttpError)
         if exception_cls.error_model is None:
             return exception_cls(response)
-        error = ApiContractViolationError.parse_json(exception_cls.error_model, response)
+        error = parse_json_model(exception_cls.error_model, response)
         return exception_cls(response, error)
 
 
@@ -162,6 +154,17 @@ class ApiInternalServerError(ApiException):
 
 class ApiHttpError(ApiException):
     """Any undocumented non-2xx status (e.g. a 502 from a proxy): no body contract."""
+
+
+_STATUS_EXCEPTIONS: dict[int, type[ApiException]] = {
+    400: ApiBadRequestError,
+    401: ApiAuthError,
+    405: ApiMethodNotAllowedError,
+    409: ApiConflictError,
+    422: ApiUnprocessableEntityError,
+    500: ApiInternalServerError,
+}
+"""Documented status codes mapped to their typed exception; anything else is ApiHttpError."""
 
 
 def raise_for_api_error(

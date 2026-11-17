@@ -2,7 +2,7 @@
 Screenplay Task: SelectMatchOutcome.
 """
 
-from framework.api.models.models import SelectionType
+from framework.api.models.betting import SelectionType
 from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
 from framework.screenplay.actor import Actor
 

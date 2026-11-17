@@ -3,7 +3,7 @@ Screenplay Task: PlaceBetViaApi.
 Places a bet directly against the REST API.
 """
 
-from framework.api.models.models import PlaceBetRequest
+from framework.api.models.betting import PlaceBetRequest
 from framework.screenplay.abilities.call_api import CallAPI
 from framework.screenplay.actor import Actor
 

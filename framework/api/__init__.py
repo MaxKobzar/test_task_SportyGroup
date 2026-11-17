@@ -14,9 +14,11 @@ from framework.api.exceptions import (
     ApiMethodNotAllowedError,
     ApiUnprocessableEntityError,
     ApiValidationError,
+    parse_json_model,
+    parse_model,
     raise_for_api_error,
 )
-from framework.api.models.models import (
+from framework.api.models import (
     Balance,
     Match,
     Odds,
@@ -46,5 +48,7 @@ __all__ = [
     "PlaceBetResponse",
     "ResetBalanceResponse",
     "SelectionType",
+    "parse_json_model",
+    "parse_model",
     "raise_for_api_error",
 ]

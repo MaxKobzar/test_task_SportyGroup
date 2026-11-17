@@ -9,10 +9,10 @@ from collections.abc import Generator
 import pytest
 from selenium.webdriver.remote.webdriver import WebDriver
 
-from framework.config.settings import Settings
-from framework.core.webdriver_factory import WebDriverFactory
-from framework.screenplay.abilities.browse_the_web import BrowseTheWeb
-from framework.screenplay.actor import Actor
+from framework.config import Settings
+from framework.core import WebDriverFactory
+from framework.screenplay import Actor
+from framework.screenplay.abilities import BrowseTheWeb
 
 logger = logging.getLogger(__name__)
 

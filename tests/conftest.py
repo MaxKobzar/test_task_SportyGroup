@@ -8,8 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from framework.api.client import BettingApiClient
-from framework.api.models.models import Match, ResetBalanceResponse
+from framework.api import BettingApiClient, Match, ResetBalanceResponse
 
 logger = logging.getLogger(__name__)
 
