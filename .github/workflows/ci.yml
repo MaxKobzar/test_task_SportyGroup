@@ -39,6 +39,8 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      pages-report: ${{ steps.stage-pages.outcome }}
     env:
       CI: "true"
       USER_ID: ${{ secrets.USER_ID }}
@@ -77,6 +79,12 @@ jobs:
           name: allure-report
           path: reports/allure-report/index.html
           retention-days: 14
+      - name: Stage Allure report for GitHub Pages
+        id: stage-pages
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && hashFiles('reports/allure-report/index.html') != '' }}
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: reports/allure-report
       - name: Upload raw test results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
@@ -86,3 +94,21 @@ jobs:
             reports/junit.xml
             reports/allure-results/
           retention-days: 14
+
+  publish-report:
+    name: Publish Allure report to GitHub Pages
+    needs: tests
+    # Runs on main only, and also when tests fail (that report matters most), as long as one was built.
+    if: ${{ !cancelled() && needs.tests.outputs.pages-report == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v5

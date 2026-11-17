@@ -1,5 +1,8 @@
 # Sporty Group QA Test Automation Framework
 
+[![CI](https://github.com/MaxKobzar/test_task_SportyGroup/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MaxKobzar/test_task_SportyGroup/actions/workflows/ci.yml)
+[![Allure Report](https://img.shields.io/badge/Allure-latest%20report-orange)](https://maxkobzar.github.io/test_task_SportyGroup/)
+
 A production-ready, hybrid UI and API test automation framework built with **Python 3**, **Selenium WebDriver**, **Pytest**, **Requests**, **uv**, and **Allure Reporting**.
 
 ---
@@ -210,6 +213,9 @@ uv run pytest --base-url "https://qae-assignment-tau.vercel.app" --user-id "<can
 ### Continuous Integration
 `.github/workflows/ci.yml` runs the pre-commit hooks, then the full suite headless. Set the repository secret `USER_ID`.
 Runs are serialized (`concurrency`) because every run mutates the balance of the same remote test user.
+
+**Latest Allure report:** https://maxkobzar.github.io/test_task_SportyGroup/ (republished by every run on `main`,
+including failing ones, by the `publish-report` job).
 
 Each run publishes two artifacts (kept 14 days), built even when tests fail:
 - **`allure-report`**: a single-file Allure HTML report; download, unzip and open `index.html` (no Allure CLI needed).
