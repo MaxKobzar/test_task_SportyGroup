@@ -4,8 +4,7 @@
 - **Specification Source:** [Feature_Specification.pdf](../materials/Feature_Specification.pdf)
 - **Defect Register:** [BUG_REPORTS.md](BUG_REPORTS.md)
 - **Methodology:** Risk-Based Testing (RBT)
-- **Automation Stack:** Python / pytest / Selenium WebDriver (UI) + HTTP client (API), Screenplay pattern
-- **Reconnaissance Tooling:** Selenium MCP Server (`selenium-mcp-server` over stdio JSON-RPC)
+- **Automation Stack:** Python / pytest / Selenium WebDriver (UI) + HTTP client (API)
 
 ---
 
@@ -19,20 +18,9 @@ Rather than pursuing exhaustive permutations across all 103 football matches and
 4. **Input & Request Validation** — stake, selection, match ID, payload and user-context rules enforced at **both** UI and API layers.
 
 ### Test Data Strategy (Time-Independent)
-
 The match catalog is static while the calendar is not: an "upcoming" match today becomes `TODAY` and then `PAST`. Scenarios therefore **never hardcode a match ID** for positive flows. Matches are resolved at runtime from `GET /api/matches`:
 
-| Data role | Resolution rule | Implementation |
-| :--- | :--- | :--- |
-| `target_match` (upcoming) | **Latest** upcoming match: the one with the greatest `kickoffDate`, where `kickoffDate > today` (strictly after; `TODAY` excluded due to ambiguity — see Open Questions). Choosing the latest keeps the data valid for as long as possible. Reference match on 2026-11-16: `mls-lafc-inter-miami-2026-12-28` (LAFC vs Inter Miami). | `target_match` fixture (suite-level `conftest.py`) |
-| `past_match` | Any match with `kickoffDate < today`. Reference: `mls-inter-miami-lafc-2026-06-20` (Inter Miami vs LAFC, 2026-06-20). | Resolved from `/api/matches` |
-| Initial balance | Call `POST /api/reset-balance`, then read the **persisted** value from `GET /api/balance`. Never trust the reset response body (see BUG-008) and never hardcode. Observed on 2026-11-16: reset response says €125.50, persisted balance is **€120.00**. | `reset_balance_precondition` fixture |
-
-**Reset consistency guard (BUG-008):** the `reset_balance_precondition` fixture also asserts `reset_response.balance == GET /api/balance` (Spec §5.3: *"Response body and persisted state must be consistent after reset"*). While BUG-008 is open, the fixture **records** this mismatch as a known-defect failure (e.g. a dedicated test marked `xfail(strict=True, reason="BUG-008")`) rather than failing every scenario's setup. Scenarios always continue from the persisted value, so their balance assertions stay correct whatever the reset endpoint returns.
-
-Concrete values quoted in scenarios (team names, odds) are **illustrative examples** taken from the reference matches above, as observed on 2026-11-16, and match the test data in [BUG_REPORTS.md](BUG_REPORTS.md); assertions are computed from the resolved match's actual odds.
-
-### Scope Boundaries & Deferred Features (Phase 2)
+### Scope Boundaries & Deferred Features
 * **Match Catalog Filters (Spec §2.6)** — date and odds-range filters are non-transactional navigation aids; deferred to a dedicated discovery suite.
 * **Bet Slip Batch Clearing (Spec §2.2)** — `Remove All` and per-selection `( x )` are low-risk UI conveniences; covered by slip component regression tests.
 
@@ -40,12 +28,12 @@ Concrete values quoted in scenarios (team names, odds) are **illustrative exampl
 Spec Table 4.1 states `Minimum €1.01 (positive values)`, while §3 states `Stake min (per bet) €1.00` and §4.4 specifies copy `Minimum stake is €1.00`. **€1.00 is adopted as the working minimum** (two of three sources agree, including user-facing copy). TC-BET-003 tests **0.99, 1.00 and 1.01** so the outcome is informative under either reading. If `1.00` is rejected, it is logged as a **spec conflict for Product Owner resolution**, not as a product defect.
 
 ### Open Questions for Product Owner
-1. **Minimum stake:** €1.00 or €1.01? (see above)
+1. **Minimum stake:** €1.00 or €1.01?
 2. **Same-day matches:** `kickoffDate` is date-only (`YYYY-MM-DD`) with no kickoff time. Is a match labeled `TODAY` still bettable (pre-match) or should it be treated as started?
 3. **Past matches in catalog:** §2.1 says the list displays *upcoming* matches. Should `PAST` matches be hidden entirely, or displayed but non-selectable?
 
 ### Key Empirical Findings (Automated Reconnaissance)
-Medium-or-higher defects found on the live application (last verified 2026-11-16) and covered by this plan. Full details are in [BUG_REPORTS.md](BUG_REPORTS.md):
+Medium-or-higher defects found on the live application and the scenarios that cover them. Full details are in [BUG_REPORTS.md](BUG_REPORTS.md):
 
 | Bug ID | Finding | Severity | Covered by |
 | :--- | :--- | :--- | :--- |
@@ -58,6 +46,7 @@ Medium-or-higher defects found on the live application (last verified 2026-11-16
 | BUG-007 | `POST /api/place-bet` returns `currency: "USD"` instead of `"EUR"` | Medium | TC-BET-001 |
 | BUG-008 | `reset-balance` response (€125.50) disagrees with persisted balance (€120.00) | Medium | Reset consistency guard (§1 Test Data Strategy) |
 | BUG-009 | Success receipt omits the Selection field | Medium | TC-BET-001 (step 12) |
+| BUG-010 | API payout truncated to the cent instead of rounded (€1.15 @ 2.20: slip €2.53, API `2.52`) | Medium | TC-BET-003 (row S11) |
 
 > Low-severity defects are tracked only in [BUG_REPORTS.md](BUG_REPORTS.md) and do not drive risk scoring in this plan.
 
@@ -70,7 +59,7 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
 | Risk ID | Category | Failure Mode / Threat | P | I | Score | Level | Scenario |
 | :--- | :--- | :--- | :-: | :-: | :-: | :--- | :--- |
 | **RSK-01** | Financial Integrity | Uncollateralized betting, negative balance or balance minting (API bypass, stale UI balance, negative stake) | 3 (BUG-001/004/005) | 3 | **9** | **CRITICAL** | `TC-BET-002`, `TC-BET-003` (S3) |
-| **RSK-02** | Contractual / Payout | Wrong payout, selection, or participants on receipt / API response | 3 (BUG-002/006/007/009) | 3 | **9** | **CRITICAL** | `TC-BET-001` |
+| **RSK-02** | Contractual / Payout | Wrong payout, selection, or participants on receipt / API response | 3 (BUG-002/006/007/009/010) | 3 | **9** | **CRITICAL** | `TC-BET-001`, `TC-BET-003` (S7, S11) |
 | **RSK-03** | Temporal Integrity | Wagering on past or started matches (past-posting) | 3 (BUG-003) | 3 | **9** | **CRITICAL** | `TC-BET-004` |
 | **RSK-04** | Concurrency | Double-click / parallel requests debit more than accepted bets | 2 | 3 | **6** | **HIGH** | `TC-BET-005` |
 | **RSK-05** | Input & Request Validation | Out-of-range / malformed stake, invalid selection or match, missing auth accepted | 2 | 3 | **6** | **HIGH** | `TC-BET-003` |
@@ -171,7 +160,8 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
 * **Risk Rationale:** Validation edges are where off-by-one and type-coercion bugs live. Sub-minimum stakes enable micro-transaction abuse. Over-maximum stakes bypass exposure limits. Sub-cent precision causes ledger rounding drift. A negative stake that is accepted turns a bet into a balance credit (observed: BUG-004, Critical). If the API checks less than the UI, every UI rule can be bypassed with a direct request. Missing user context is an authorization weakness. One data-driven matrix covers Spec §4.1–§4.4 cheaply at the API level, while the UI rows cover the copy users see.
 * **Preconditions:**
   * Balance reset (≥ €100.00 available).
-  * `target_match` resolved (`kickoffDate > today`). For row S7, prefer an outcome where `100 × odds` is not exact in binary floating point (e.g. LAFC vs Inter Miami Home `2.20`: `100 × 2.2 = 220.00000000000003`), so the exact-to-the-cent check is meaningful.
+  * `target_match` resolved (`kickoffDate > today`). For row S7, prefer an outcome where `100 × odds` is not exact in binary floating point (e.g. LAFC vs Inter Miami Home `2.20`: `100 × 2.2 = 220.00000000000003`). That catches a server that rounds *up* or drops precision, but not one that truncates: `220.00000000000003` truncates to the correct `220.00`.
+  * For row S11, choose a stake and outcome whose exact decimal product has at most 2 decimals but whose floating-point product falls just **below** it (e.g. LAFC vs Inter Miami Home `2.20` with stake `1.15`: exact `2.53`, float `2.5299999999999998`). If `target_match` has different odds, pick the stake at runtime: the first stake in `1.01 … 10.00` where `Decimal(stake) × Decimal(odds)` has ≤ 2 decimals and `floor(stake × odds × 100) / 100` is lower than it. Every upcoming match in the current catalog has such a stake.
 * **Steps:**
   1. Add a `target_match` selection to the Bet Slip.
   2. For each **UI stake row** below, clear `#bet-slip-stake-input`, type the input, and record: the displayed value, the inline message, and the `Place Bet` `disabled` property.
@@ -192,6 +182,7 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
   | S8 | `100.01` | `Maximum stake is €100.00`; disabled | `422` |
   | S9 | `10.555` | Third decimal blocked by the input **or** placement blocked with a precision message. Either is acceptable per Spec §4.1/§4.4. The value is never silently rounded and submitted. | `422` |
   | S10 | `1,5` / `1.2.3` (single decimal separator rule) | Rejected; `Place Bet` disabled | n/a (UI format rule) |
+  | S11 | `1.15` on odds `2.20` (or the runtime-chosen stake, see Preconditions) | No error; enabled; payout = exact `stake × odds` to the cent (e.g. `€2.53`) | `200`; `payout == 2.53` exactly, equal to the slip value — regression for BUG-010 (observed `2.52`) |
 
   **B. Request / protocol rows (API only — Spec §4.2, §4.3, §5.1)**
 
@@ -209,7 +200,7 @@ Scoring: **Probability (P)** and **Impact (I)** on a 1–3 scale; **Score = P ×
 * **Expected Result:**
   * Only stakes in the closed interval `[1.00, 100.00]` with at most 2 decimal places are accepted, at **both** layers.
   * UI copy matches Spec §4.4 exactly: `Minimum stake is €1.00`, `Maximum stake is €100.00`.
-  * Payout at the maximum stake is exact to the cent (no float truncation).
+  * Payout is exact to the cent at the maximum stake (S7) and for a product that floating point represents just below its exact value (S11). The API payout equals the Bet Slip's Potential Payout (no truncation).
   * Every invalid request is rejected with the status class defined in Spec §5.3 (`400`/`401`/`405`/`422`). Error bodies are checked only against the published OpenAPI schema.
   * No rejected row changes the balance.
 

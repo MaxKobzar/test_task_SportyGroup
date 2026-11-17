@@ -7,7 +7,6 @@
 - **Environment:** macOS (Apple Silicon), Chrome 157 (headless, 1440×1000), Python 3.10, Selenium 4.52
 - **Frontend Build:** `/assets/index-BAomKdAy.js`
 - **Test Account ID:** `candidate-Mc2IYbjdqhj8`
-- **Last Verified:** 2026-11-16 — all defects below reproduced on this date
 
 > **Reproduction precondition (applies to every defect):** start each repro with `POST /api/reset-balance` (header `x-user-id: candidate-Mc2IYbjdqhj8`).
 >
@@ -19,7 +18,7 @@
 
 ## Executive Summary & Defect Triage
 
-9 defects of Medium severity or higher are confirmed: **4 Critical, 1 High, 4 Medium**. Together they let a player (a) bet money they do not have — through the API *and* through the normal UI, (b) **mint balance with a negative stake**, and (c) bet on matches that have already finished. The customer's receipt also misstates the payout, the match and the selection.
+17 defects are confirmed: **4 Critical, 1 High, 5 Medium, 7 Low**. Together they let a player (a) bet money they do not have — through the API *and* through the normal UI, (b) **mint balance with a negative stake**, and (c) bet on matches that have already finished. The customer's receipt also misstates the payout, the match and the selection, and the API settles payouts a cent below what the Bet Slip promises. The Low findings are protocol-conformance gaps in the API and defects in the match-catalog filters (Spec §2.6).
 
 | Bug ID | Title | Severity | Layer | Impact Area |
 | :--- | :--- | :--- | :--- | :--- |
@@ -32,15 +31,27 @@
 | [**BUG-007**](#bug-007) | `POST /api/place-bet` returns `currency: "USD"` instead of `"EUR"` | **Medium** | API | Reconciliation |
 | [**BUG-008**](#bug-008) | `reset-balance` response (€125.50) disagrees with persisted balance (€120.00) | **Medium** | API | Ledger consistency |
 | [**BUG-009**](#bug-009) | Success receipt omits the **Selection** field | **Medium** | UI | Contractual accuracy |
+| [**BUG-010**](#bug-010) | API payout truncated to the cent instead of rounded (pays €0.01 less than the slip) | **Medium** | API | Payout accuracy |
+| [**BUG-011**](#bug-011) | Malformed or empty JSON body returns `500`/`422` instead of `400` | Low | API | Protocol conformance |
+| [**BUG-012**](#bug-012) | `GET /api/place-bet` returns `200 {}` instead of `405` | Low | API | Protocol conformance |
+| [**BUG-013**](#bug-013) | `405` responses omit the mandatory `Allow` header | Low | API | Protocol conformance |
+| [**BUG-014**](#bug-014) | Odds filter applies an invalid range (min > max) without feedback | Low | UI | Catalog filters |
+| [**BUG-015**](#bug-015) | Odds filter lower bound is exclusive (spec: inclusive) | Low | UI | Catalog filters |
+| [**BUG-016**](#bug-016) | Match counter stuck at "Showing 103 matches"; no empty-state message | Low | UI | Catalog filters / UX |
+| [**BUG-017**](#bug-017) | Match card shows kickoff date only, no kickoff time | Low | UI + API | Match information |
 
 **Notes on this revision**
-- IDs are ordered by severity. Low-severity findings are not part of this register.
+- IDs are ordered by severity. BUG-010 – BUG-017 were added on 2026-11-17. None of them repeats BUG-001 – BUG-009 or a check already listed under *Verified as working*. Each new report has a **Detected by** line naming the test case that catches it, or stating that none does.
 - Each defect has a **Test Data** line naming the exact data used and the equivalent data class that reproduces it if that data goes stale.
 - Expected results quote only spec-defined status classes. Error codes such as `invalid_stake_min` are quoted as observations, not requirements.
 - The frontend bundle is minified; quoted source lines are on line 49 of `/assets/index-BAomKdAy.js`.
 
 ### Verified as working (no defect)
 Stake min/max/precision/type validation at both layers (except negative values, BUG-004). Invalid selection, blank/unknown match ID and non-object body → `422`/`400`. Missing or empty `x-user-id` → `401`. `PUT`/`DELETE`/`PATCH` → `405`. Concurrent requests: 5 parallel bets gave 3×`200` + 2×`409`, and the debit was exactly €30. Error modal copy plus Rebet/Close/X behaviour match spec §2.5. The UI input masks `10.555` → `10.55` and strips the `-` sign. All 103 matches have odds within [1.01, 1000].
+
+Added 2026-11-17: a client-supplied `odds` field in the request body is ignored (the server uses catalog odds). Lower-case `selection` (`"home"`) and a whitespace-padded `matchId` are rejected with `422`. 30 sequential bets were all accepted with no throttling. For every match the implied probabilities sum to more than 1 (`1/home + 1/draw + 1/away` from 1.033 to 1.147), so betting all three outcomes never guarantees a profit. The date filter handles a single day and an inclusive range (either click order) correctly.
+
+*Observed, not logged:* on 2026-11-17 around 09:30, every valid `POST /api/place-bet` returned `500 internal_server_error` for about 2 minutes, with no balance change. It could not be reproduced afterwards, so it is not registered.
 
 ---
 
@@ -201,7 +212,7 @@ Stake min/max/precision/type validation at both layers (except negative values, 
   3. Open the app and read the header balance.
 * **Expected Result:** Per Spec §5.3: *"Response body and persisted state must be consistent after reset."* Every source reports the same value.
 * **Actual Result:** The reset response says **`125.5`**, but `GET /api/balance` returns **`120`** and the UI shows **€120.00**. Reproduced 3/3 times; not a timing issue.
-* **Business Impact:** The ledger and the API that reports on it disagree. Any client or test that trusts the reset response works from a wrong balance, and real reconciliation jobs would produce false mismatches.
+* **Business Impact:** Any client or reconciliation job that trusts the reset response works from a wrong balance and reports false ledger mismatches.
 * **Evidence:** [bug_008_reset_balance_mismatch_ui.png](screenshots/bug_008_reset_balance_mismatch_ui.png) — the UI shows €120.00 straight after a reset whose response returned `125.5`.
 
 ---
@@ -219,3 +230,155 @@ Stake min/max/precision/type validation at both layers (except negative values, 
 * **Actual Result:** The receipt (`#B-43255`) shows Bet ID, Match, Stake, Odds, Potential Payout and Timestamp. **There is no Selection field** (no Home/Draw/Away / `Match Winner: …`). The receipt view model in the bundle has no selection property: `{betId, matchLabel, stakeAmount, odds, potentialPayout, placedLabel}`.
 * **Business Impact:** The customer's only confirmation does not say which outcome they backed; combined with the inverted teams (BUG-006) it cannot be relied on.
 * **Evidence:** [bug_002_slip_payout_15_25.png](screenshots/bug_002_slip_payout_15_25.png) (slip: `Match Winner: Away`) → [bug_002_006_009_receipt.png](screenshots/bug_002_006_009_receipt.png) (receipt: no Selection line).
+
+---
+
+### BUG-010
+**Title:** API Payout Truncated to the Cent Instead of Rounded; the Settled Payout Is €0.01 Below the Slip's Potential Payout
+**Severity:** Medium
+
+* **Test Data:** `matchId: mls-lafc-inter-miami-2026-12-28` (LAFC vs Inter Miami, kickoff 2026-12-28), selection `HOME` (odds 2.20); stake `1.15` (exact product `2.53`). Second example: `eredivisie-ajax-az-2026-11-21` (Ajax vs AZ Alkmaar), `AWAY` (odds 4.40), stake `1.15` (exact product `5.06`). Reproduces with any match with `kickoffDate` after today and any stake whose `stake × odds` is not exactly representable in binary floating point, or ends in a half cent.
+* **Reproduction Steps:**
+  1. `POST /api/reset-balance`.
+  2. In the UI, select **LAFC vs Inter Miami → 1** (2.20) and enter stake `1.15`. Note the slip's **Potential Payout**.
+  3. ```bash
+     curl -X POST https://qae-assignment-tau.vercel.app/api/place-bet \
+       -H "Content-Type: application/json" -H "x-user-id: candidate-Mc2IYbjdqhj8" \
+       -d '{"matchId":"mls-lafc-inter-miami-2026-12-28","selection":"HOME","stake":1.15}'
+     ```
+  4. Compare `payout` in the response with the slip value from step 2.
+* **Expected Result:** Per Spec §2.2/§2.4 the payout is `stake × odds` in EUR to the cent: `1.15 × 2.20 = €2.53`. The slip, the receipt and the API agree.
+* **Actual Result:** The slip shows **€2.53**, but the API returns **`"payout": 2.52`**:
+  ```json
+  {"message":"Bet placed successfully","matchId":"mls-lafc-inter-miami-2026-12-28","selection":"HOME","stake":1.15,"odds":2.2,"payout":2.52,"balance":118.85,"currency":"USD"}
+  ```
+  The server floors the floating-point product (`1.15 × 2.2 = 2.5299999999999998` → `2.52`). Further API results on 2026-11-17, with the exact value in brackets: Ajax–AZ `AWAY` 4.40 × `1.15` → `5.05` (5.06) and × `2.30` → `10.11` (10.12); Derby–Norwich `DRAW` 3.25 × `1.16` → `3.76` (3.77). Half-cent values always go down: Ajax–AZ `HOME` 1.85 × `1.10` → `2.03` (2.035 rounds to 2.04) and × `1.50` → `2.77` (2.775 rounds to 2.78). The same floor explains `"payout": -110.01` for a `-50` stake in BUG-004. A sweep of the catalog shows 509 combinations with an exact 2-decimal product that lose a cent, for upcoming matches and stakes €1.00–€10.00 alone. The UI slip uses `toFixed(2)` on the float, so it also shows some half-cent values a cent low (`1.15 × 3.90 = 4.485` → `€4.48`).
+* **Business Impact:** Customers are systematically settled €0.01 below the payout shown before confirming, always in the operator's favour, which is a fair-payout compliance risk and a source of disputes.
+* **Detected by:** TC-BET-003 row S11 (stake `1.15` on odds `2.20`, added 2026-11-17). S7 (`100 × 2.20`) and TC-BET-001 step 16 (`10 × 3.05`) use products that floor correctly, so they miss it.
+* **Evidence:** API response above. [bug_010_017_slip_payout_5_06.png](screenshots/bug_010_017_slip_payout_5_06.png) — the Ajax vs AZ Alkmaar slip shows €5.06 for €1.15 @ 4.40; the same UI bet's `place-bet` response (captured via CDP) returned `"payout": 5.05`.
+
+---
+
+### BUG-011
+**Title:** Malformed or Empty JSON Body Returns `500` / `422` Instead of `400`
+**Severity:** Low
+
+* **Test Data:** No match data required. Bodies `{bad`, `{not json`, `{"matchId":`, `   ` (whitespace only) and an empty body, all with `Content-Type: application/json`.
+* **Reproduction Steps:**
+  1. ```bash
+     curl -i -X POST https://qae-assignment-tau.vercel.app/api/place-bet \
+       -H "Content-Type: application/json" -H "x-user-id: candidate-Mc2IYbjdqhj8" -d '{bad'
+     ```
+  2. Repeat with each body listed in Test Data.
+* **Expected Result:** Per Spec §4.3/§5.3 and the OpenAPI document (`400` example `invalid_json` / *"Malformed JSON body."*), all of them are rejected with **`400`**.
+* **Actual Result:**
+  | Body | Status | Response |
+  | :--- | :-: | :--- |
+  | `{bad`, `{not json`, `{"matchId":`, `   ` | **`500`** | `{"error":"internal_server_error","message":"Unable to process request."}` |
+  | *(empty)* | **`422`** | `{"error":"invalid_match_id","message":"Match id is invalid."}` |
+  | `"str"` (valid JSON, not an object) | `400` | `{"error":"invalid_json","message":"Malformed JSON body."}` — the error code fits the `{bad` case |
+  | `null` / `[1,2]` | `400` | `invalid_request` (correct) |
+
+  The parse error is not caught, so it escapes as an unhandled server error. No balance change. Reproduced 2/2 runs; other validation (for example stake `101` → `422`) behaved normally in the same run, so this is not the transient outage noted above.
+* **Business Impact:** Client mistakes surface as server faults, inflating 5xx alerts, masking real outages and telling integrators to retry instead of fixing the request.
+* **Detected by:** TC-BET-003 row R5 (`{not json` → `400`). The empty-body variant is not in the matrix.
+* **Evidence:** Responses above (2026-11-17).
+
+---
+
+### BUG-012
+**Title:** `GET /api/place-bet` Returns `200 {}` Instead of `405 Method Not Allowed`
+**Severity:** Low
+
+* **Test Data:** No match data required.
+* **Reproduction Steps:**
+  1. `curl -i https://qae-assignment-tau.vercel.app/api/place-bet -H "x-user-id: candidate-Mc2IYbjdqhj8"`
+  2. For comparison, send `HEAD` and `PUT` to the same URL.
+* **Expected Result:** Per Spec §4.3/§5.3, an unsupported method returns `405`. `HEAD`, `PUT`, `DELETE` and `PATCH` already do, and so does `GET /api/reset-balance`.
+* **Actual Result:** `GET` returns **`HTTP/2 200`** with body `{}` and `content-type: application/json`. No bet is placed; the balance is unchanged (`120 → 120`).
+* **Business Impact:** Monitoring, caches and clients see a successful empty response where the endpoint should refuse the request.
+* **Detected by:** TC-BET-003 row R7 (`GET` / `PUT` → `405`). It is not a duplicate of the *Verified as working* entry, which covered only `PUT`/`DELETE`/`PATCH`.
+* **Evidence:** `curl -i` output above (2026-11-17).
+
+---
+
+### BUG-013
+**Title:** `405 Method Not Allowed` Responses Omit the Mandatory `Allow` Header
+**Severity:** Low
+
+* **Test Data:** No match data required. Any unsupported method, for example `PUT /api/place-bet`, `POST /api/matches`, `POST /api/balance`, `GET /api/reset-balance`.
+* **Reproduction Steps:**
+  1. `curl -i -X POST https://qae-assignment-tau.vercel.app/api/matches -H "x-user-id: candidate-Mc2IYbjdqhj8"`
+  2. Inspect the response headers.
+* **Expected Result:** RFC 9110 §15.5.6: *"The origin server MUST generate an `Allow` header field in a 405 response containing a list of the target resource's currently supported methods."* For example, `Allow: GET` on `/api/matches`.
+* **Actual Result:** `405` with `{"error":"method_not_allowed"}`. There is no `Allow` header; only the CORS header `access-control-allow-methods: GET, OPTIONS` is present, and that applies to cross-origin preflight only.
+* **Business Impact:** HTTP clients, API gateways and contract-testing tools can't discover the allowed methods; there is no user-facing effect.
+* **Detected by:** Not covered. TC-BET-003 R7 checks only the status code.
+* **Evidence:** Response headers above (2026-11-17), the same on all four endpoints.
+
+---
+
+### BUG-014
+**Title:** Odds Filter Applies an Invalid Range (Min > Max) Without Any Feedback
+**Severity:** Low
+
+* **Test Data:** Odds filter Min `3.00`, Max `2.00`. Catalog-independent.
+* **Reproduction Steps:**
+  1. Open the app and click **Odds: All**.
+  2. Type `3` in **Min** and `2` in **Max**.
+  3. Click **Apply**.
+* **Expected Result:** Per Spec §2.6, the odds filter *"must reject invalid ranges with clear feedback"*: an error message is shown and the range is not applied (or **Apply** is disabled).
+* **Actual Result:** No message appears and **Apply** stays enabled. The filter is applied, the toggle reads **`Odds: 3.00 - 2.00`**, and the list becomes empty without explanation. While the invalid values are typed, the popover's range label shows `3.00 - 10.00`, which does not match the Max input.
+* **Business Impact:** Users see an unexplained empty catalog and may assume no matches are available; bets and money are unaffected.
+* **Detected by:** Not covered. Filters are deferred to Phase 2 in the test plan (§1 Scope Boundaries, §4 Traceability).
+* **Evidence:** [bug_014_odds_min_gt_max_no_feedback.png](screenshots/bug_014_odds_min_gt_max_no_feedback.png) — Min `3,00`, Max `2`, **Apply** enabled, no validation message.
+
+---
+
+### BUG-015
+**Title:** Odds Filter Lower Bound Is Exclusive; Spec Requires an Inclusive Range
+**Severity:** Low
+
+* **Test Data:** `bundesliga-bayern-stuttgart-2026-12-15` card *Bayern Munich vs Stuttgart* (UPCOMING, Tue Dec 15, odds 1.45 / 4.60 / **7.20**); draw odds `3.45`, which appears on 8 matches (for example `mls-lafc-inter-miami-2026-12-28`); PSG vs Marseille is `ligue-1-psg-marseille` (1.35 / 5.00 / 7.50).
+* **Reproduction Steps:**
+  1. Open **Odds** and set Min `7.20`, Max `8.00`, then **Apply**.
+  2. Set Min `3.45`, Max `3.45`, then **Apply**.
+  3. For comparison, set Min `1.00`, Max `1.35`, then **Apply** (PSG vs Marseille has home odds 1.35).
+* **Expected Result:** Per Spec §2.6, the min/max range is inclusive. Step 1 shows Bayern vs Stuttgart (7.20 equals the minimum). Step 2 shows the 8 matches priced at 3.45. Step 3 shows PSG vs Marseille.
+* **Actual Result:** Step 1 hides Bayern vs Stuttgart. Step 2 returns **0** matches. Step 3 shows PSG vs Marseille, so the upper bound is inclusive. In 5 of 6 ranges tested, the result counts match the rule `min < odds ≤ max` (for example 2.00–3.00 → 69 cards; the inclusive rule gives 73). The exception: in the 5.00–7.50 range, PSG vs Marseille (X 5.00, 2 7.50) is hidden although 7.50 is inside the upper bound.
+* **Business Impact:** Users filtering from a listed price miss matching events; navigation only, no money is affected.
+* **Detected by:** Not covered (filters deferred to Phase 2).
+* **Evidence:** [bug_015_016_odds_exact_empty_stale_counter.png](screenshots/bug_015_016_odds_exact_empty_stale_counter.png) — `Odds: 3.45 - 3.45` applied, empty list.
+
+---
+
+### BUG-016
+**Title:** Match Counter Stays at "Showing 103 matches" After Filtering; No Empty-State Message
+**Severity:** Low
+
+* **Test Data:** Any filter that narrows the list, for example Date `21/11/2026` (1 match), Odds `2.00 – 3.00` (69 matches) or Odds `3.45 – 3.45` (0 matches).
+* **Reproduction Steps:**
+  1. Open the app and note the counter `Showing 103 matches` next to *Upcoming Football Matches*.
+  2. Apply any date or odds filter.
+  3. Read the counter, and look at the list when no match qualifies.
+* **Expected Result:** The counter shows the number of matches actually displayed. When none qualify, the list shows an empty-state message (for example, "No matches found for the selected filters").
+* **Actual Result:** The counter stays at **`Showing 103 matches`** for 69, 3, 2, 1 and 0 visible cards. With 0 results the list area is blank, with no message.
+* **Business Impact:** Users are misled about how many events match, and an empty filtered catalog looks broken (cosmetic only).
+* **Detected by:** Not covered (filters deferred to Phase 2).
+* **Evidence:** [bug_015_016_odds_exact_empty_stale_counter.png](screenshots/bug_015_016_odds_exact_empty_stale_counter.png) — `Showing 103 matches` above an empty list.
+
+---
+
+### BUG-017
+**Title:** Match Card Shows Kickoff Date Only, With No Kickoff Time
+**Severity:** Low
+
+* **Test Data:** Any match, for example `mls-lafc-inter-miami-2026-12-28` (card label `Mon, Dec 28`), `eredivisie-ajax-az-2026-11-21` (`Saturday`) or the same-day `TODAY` match `ligue-1-marseille-psg-2026-11-17` (`Today`).
+* **Reproduction Steps:**
+  1. Open the app and read the label next to the competition name on any match card.
+  2. `GET /api/matches` and inspect `kickoffDate`.
+* **Expected Result:** Per Spec §2.1, each match shows a *"kickoff date/time label"*, so the user can tell when the match starts.
+* **Actual Result:** Cards show only a day: `Mon, Dec 28`, a weekday name such as `Saturday`, or `Today`. No time is shown anywhere, and the API carries only a date (`kickoffDate: "YYYY-MM-DD"`), so the UI has no time to display.
+* **Business Impact:** On match day customers can't tell whether a `TODAY` match has already kicked off, which matters for a pre-match-only product (test plan open question #2).
+* **Detected by:** Not covered.
+* **Evidence:** [bug_010_017_slip_payout_5_06.png](screenshots/bug_010_017_slip_payout_5_06.png) — card labels `Fri, Nov 13`, `Today`, `Saturday`, `Fri, Nov 27`, `Tue, Dec 01`, `Fri, Dec 04`, none with a time.
