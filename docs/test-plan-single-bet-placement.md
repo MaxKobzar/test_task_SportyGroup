@@ -2,7 +2,7 @@
 
 - **Application Under Test (AUT):** [Sports Betting QA Application](https://qae-assignment-tau.vercel.app/?user-id=candidate-Mc2IYbjdqhj8)
 - **Specification Source:** [Feature_Specification.pdf](../materials/Feature_Specification.pdf)
-- **Defect Register:** [BUG_REPORTS.md](BUG_REPORTS.md)
+- **Defect Register:** [bug-reports.md](bug-reports.md)
 - **Methodology:** Risk-Based Testing (RBT)
 - **Automation Stack:** Python / pytest / Selenium WebDriver (UI) + HTTP client (API)
 
@@ -33,7 +33,7 @@ Spec Table 4.1 states `Minimum €1.01 (positive values)`, while §3 states `Sta
 3. **Past matches in catalog:** §2.1 says the list displays *upcoming* matches. Should `PAST` matches be hidden entirely, or displayed but non-selectable?
 
 ### Key Empirical Findings (Automated Reconnaissance)
-Medium-or-higher defects found on the live application and the scenarios that cover them. Full details are in [BUG_REPORTS.md](BUG_REPORTS.md):
+Medium-or-higher defects found on the live application and the scenarios that cover them. Full details are in [bug-reports.md](bug-reports.md):
 
 | Bug ID | Finding | Severity | Covered by |
 | :--- | :--- | :--- | :--- |
@@ -48,7 +48,7 @@ Medium-or-higher defects found on the live application and the scenarios that co
 | BUG-009 | Success receipt omits the Selection field | Medium | TC-BET-001 (step 12) |
 | BUG-010 | API payout truncated to the cent instead of rounded (€1.15 @ 2.20: slip €2.53, API `2.52`) | Medium | TC-BET-003 (row S11) |
 
-> Low-severity defects are tracked only in [BUG_REPORTS.md](BUG_REPORTS.md) and do not drive risk scoring in this plan.
+> Low-severity defects are tracked only in [bug-reports.md](bug-reports.md) and do not drive risk scoring in this plan.
 
 ---
 

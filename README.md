@@ -63,7 +63,7 @@ sporty_group/
 │           ├── receipt_details.py     # ReceiptDetails
 │           ├── api_balance.py         # ApiBalance
 │           └── api_matches_feed.py    # ApiMatchesFeed
-├── test-plans/                        # Risk-based test plan, bug reports and evidence screenshots
+├── docs/                              # QA docs: test plan, strategy, bug reports, evidence screenshots
 └── tests/
     ├── conftest.py                    # Shared fixtures: reset_balance_precondition, target_match
     ├── ui/
@@ -190,7 +190,7 @@ uv run pytest tests/api/ -k "TC-BET-003"     # rows S3 and S9 only
 
 #### Known Bugs (strict xfail)
 Cases blocked by a confirmed defect are marked `xfail` (strict globally via `xfail_strict = true`) with the bug ID and the exact
-failure type the bug produces (`raises=`), so an unrelated error still fails the run (see `test-plans/BUG_REPORTS.md`).
+failure type the bug produces (`raises=`), so an unrelated error still fails the run (see `docs/bug-reports.md`).
 A normal run shows them as `XFAIL`; once the bug is fixed the case turns `XPASS` and fails the run,
 so the marker must be removed. To see the real assertion failures:
 ```bash
