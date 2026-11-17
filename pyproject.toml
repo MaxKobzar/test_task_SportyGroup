@@ -1,24 +1,26 @@
-[tool.poetry]
+[project]
 name = "sporty-qa-framework"
 version = "0.1.0"
 description = "Hybrid UI (Selenium + Screenplay & POM) and API Test Automation Framework"
-authors = ["QA Automation Engineer <qa@example.com>"]
+authors = [{ name = "QA Automation Engineer", email = "qa@example.com" }]
 readme = "README.md"
-packages = [{include = "framework"}]
-
-[tool.poetry.dependencies]
-python = ">=3.10,<3.14"
-selenium = "^4.20.0"
-requests = "^2.31.0"
-pydantic = "^2.0.0"
-pytest = "^8.0.0"
-allure-pytest = "^2.13.0"
-assertpy = "^2.0"
-python-dotenv = "^1.0.0"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "selenium>=4.20.0,<5",
+    "requests>=2.31.0,<3",
+    "pydantic>=2.0.0,<3",
+    "pytest>=8.0.0,<9",
+    "allure-pytest>=2.13.0,<3",
+    "assertpy>=2.0,<3",
+    "python-dotenv>=1.0.0,<2",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["framework"]
 
 [tool.ruff]
 line-length = 100
@@ -65,7 +67,8 @@ ignore_missing_imports = true
 
 [dependency-groups]
 dev = [
-    "ruff (>=0.17.5,<0.18.0)",
-    "mypy (>=2.4.1,<3.0.0)",
-    "types-requests (>=2.33.0.20261030,<3.0.0.0)"
+    "ruff>=0.17.5,<0.18.0",
+    "mypy>=2.4.1,<3.0.0",
+    "types-requests>=2.33.0.20261030,<3.0.0.0",
+    "pre-commit>=4.0.0",
 ]

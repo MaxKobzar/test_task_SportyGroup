@@ -21,18 +21,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.10"
-      - name: Install Poetry and dependencies
-        run: |
-          pipx install poetry
-          poetry install --no-interaction
+          version: "0.7.13"
+          enable-cache: true
+      - name: Install Python and dependencies
+        run: uv sync --locked
       - name: Run pre-commit hooks
-        run: |
-          pipx install pre-commit
-          source .venv/bin/activate
-          pre-commit run --all-files --show-diff-on-failure
+        run: uv run pre-commit run --all-files --show-diff-on-failure
 
   tests:
     name: API & UI tests
@@ -44,15 +40,14 @@ jobs:
       USER_ID: ${{ secrets.USER_ID }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.10"
-      - name: Install Poetry and dependencies
-        run: |
-          pipx install poetry
-          poetry install --no-interaction
+          version: "0.7.13"
+          enable-cache: true
+      - name: Install Python and dependencies
+        run: uv sync --locked
       - name: Run tests
-        run: poetry run pytest --junitxml=reports/junit.xml
+        run: uv run pytest --junitxml=reports/junit.xml
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4

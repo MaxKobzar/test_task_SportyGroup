@@ -1,6 +1,6 @@
 # Sporty Group QA Test Automation Framework
 
-A production-ready, hybrid UI and API test automation framework built with **Python 3**, **Selenium WebDriver**, **Pytest**, **Requests**, **Poetry**, and **Allure Reporting**.
+A production-ready, hybrid UI and API test automation framework built with **Python 3**, **Selenium WebDriver**, **Pytest**, **Requests**, **uv**, and **Allure Reporting**.
 
 ---
 
@@ -13,8 +13,9 @@ sporty_group/
 ├── .github/workflows/ci.yml           # CI: pre-commit (lint, types) then API & UI tests
 ├── .pre-commit-config.yaml            # Ruff, mypy, collection check, guardrails
 ├── .env.example                       # Template for the local .env (never commit .env)
-├── pyproject.toml                     # Poetry dependencies, dev tools, ruff & mypy config
-├── poetry.lock                        # Locked dependencies
+├── pyproject.toml                     # PEP 621 dependencies, dev tools, ruff & mypy config
+├── uv.lock                            # Locked dependencies (cross-platform)
+├── .python-version                    # Python version pinned for uv
 ├── pytest.ini                         # Pytest options, strict markers, logging format, markers
 ├── README.md                          # Framework documentation
 ├── conftest.py                        # Root: pytest_addoption, settings/api_client fixtures, triage hook
@@ -123,39 +124,38 @@ When a test fails in setup or in its body (including expected failures), the hoo
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Python 3.10+
-- Poetry 2.0+
+- [uv](https://docs.astral.sh/uv/) (`brew install uv`); it installs the pinned Python 3.10 automatically
 - Google Chrome (desktop)
 - Allure CLI (optional, for viewing HTML report: `brew install allure`)
 
-### 1. Installation via Poetry
+### 1. Installation via uv
 ```bash
-poetry install                 # creates the project-local .venv (runtime + dev tools)
+uv sync                        # creates the project-local .venv (runtime + dev tools)
 cp .env.example .env           # then set USER_ID
-pre-commit install             # optional (pipx install pre-commit): hooks on every commit
+uv run pre-commit install      # optional: hooks on every commit
 ```
 
 ### 2. Running Tests
 
 #### Run All Tests (UI + API)
 ```bash
-poetry run pytest tests/
+uv run pytest tests/
 ```
 
 #### Run Only API Tests
 ```bash
-poetry run pytest tests/api/
+uv run pytest tests/api/
 ```
 
 #### Run Only UI Tests (TC-BET-001 critical user journey)
 ```bash
-poetry run pytest tests/ui/
+uv run pytest tests/ui/
 ```
 
 #### Run a Single Test Plan Case
 Parametrized case IDs start with the test plan reference, so `-k` selects them:
 ```bash
-poetry run pytest tests/api/ -k "TC-BET-003"     # rows S3 and S9 only
+uv run pytest tests/api/ -k "TC-BET-003"     # rows S3 and S9 only
 ```
 
 #### Known Bugs (strict xfail)
@@ -164,17 +164,17 @@ failure type the bug produces (`raises=`), so an unrelated error still fails the
 A normal run shows them as `XFAIL`; once the bug is fixed the case turns `XPASS` and fails the run,
 so the marker must be removed. To see the real assertion failures:
 ```bash
-poetry run pytest tests/ --runxfail
+uv run pytest tests/ --runxfail
 ```
 
 #### Run in Headed Browser (Visible UI)
 ```bash
-poetry run pytest tests/ui/ --headless false
+uv run pytest tests/ui/ --headless false
 ```
 
 #### Run with Custom Base URL or User ID
 ```bash
-poetry run pytest --base-url "https://qae-assignment-tau.vercel.app" --user-id "<candidate-user-id>"
+uv run pytest --base-url "https://qae-assignment-tau.vercel.app" --user-id "<candidate-user-id>"
 ```
 
 ### Continuous Integration
