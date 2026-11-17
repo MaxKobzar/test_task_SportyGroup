@@ -14,16 +14,20 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  UV_VERSION: "0.13.6"
+  ALLURE_VERSION: "2.46.1"
+
 jobs:
   lint:
     name: Lint & type check
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
-          version: "0.7.13"
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
       - name: Install Python and dependencies
         run: uv sync --locked
@@ -39,19 +43,46 @@ jobs:
       CI: "true"
       USER_ID: ${{ secrets.USER_ID }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
-          version: "0.7.13"
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
       - name: Install Python and dependencies
         run: uv sync --locked
       - name: Run tests
         run: uv run pytest --junitxml=reports/junit.xml
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@v4
+
+      # The report is built even when tests fail: that is when it is needed most.
+      - uses: actions/setup-java@v6
+        if: ${{ !cancelled() && hashFiles('reports/allure-results/*') != '' }}
         with:
-          name: test-reports
-          path: reports/
+          distribution: temurin
+          java-version: "21"
+      - name: Generate Allure report
+        if: ${{ !cancelled() && hashFiles('reports/allure-results/*') != '' }}
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/allure.tgz" \
+            "https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz"
+          tar -xzf "$RUNNER_TEMP/allure.tgz" -C "$RUNNER_TEMP"
+          # --single-file inlines all assets, so index.html opens straight from the downloaded artifact.
+          "$RUNNER_TEMP/allure-${ALLURE_VERSION}/bin/allure" generate reports/allure-results \
+            --clean --single-file --report-name "Sporty QA - run ${GITHUB_RUN_NUMBER}" \
+            --output reports/allure-report
+
+      - name: Upload Allure HTML report
+        if: ${{ !cancelled() && hashFiles('reports/allure-report/index.html') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: allure-report
+          path: reports/allure-report/index.html
+          retention-days: 14
+      - name: Upload raw test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: |
+            reports/junit.xml
+            reports/allure-results/
           retention-days: 14

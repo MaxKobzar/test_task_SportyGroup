@@ -208,9 +208,14 @@ uv run pytest --base-url "https://qae-assignment-tau.vercel.app" --user-id "<can
 ```
 
 ### Continuous Integration
-`.github/workflows/ci.yml` runs the pre-commit hooks, then the full suite headless, and uploads JUnit and Allure
-results. Set the repository secret `USER_ID`. Runs are serialized (`concurrency`) because every run
-mutates the balance of the same remote test user.
+`.github/workflows/ci.yml` runs the pre-commit hooks, then the full suite headless. Set the repository secret `USER_ID`.
+Runs are serialized (`concurrency`) because every run mutates the balance of the same remote test user.
+
+Each run publishes two artifacts (kept 14 days), built even when tests fail:
+- **`allure-report`**: a single-file Allure HTML report; download, unzip and open `index.html` (no Allure CLI needed).
+- **`test-results`**: `junit.xml` and the raw `allure-results/`, for local `allure serve` or other tooling.
+
+Tool versions are pinned in the workflow `env` (`UV_VERSION`, `ALLURE_VERSION`); keep your local uv on the same version (`uv self update`).
 
 ### 3. Generating & Viewing Allure Report
 ```bash
