@@ -147,7 +147,7 @@ class TestSingleBetCriticalUserJourney:
                     "Header balance reduced by the stake, without reload"
                 ).is_equal_to(balance_before - bet.stake)
 
-                bettor_actor.attempts_to(CloseReceiptModal.if_displayed())
-                assert_that(bettor_actor.asks_for(IsReceiptModalClosed.check())).described_as(
-                    "Receipt modal is closed"
-                ).is_true()
+            bettor_actor.attempts_to(CloseReceiptModal.if_displayed())
+            assert_that(bettor_actor.asks_for(IsReceiptModalClosed.check())).described_as(
+                "Receipt modal is closed"
+            ).is_true()
